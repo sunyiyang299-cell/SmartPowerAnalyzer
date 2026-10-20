@@ -73,7 +73,15 @@ class WindowTests(unittest.TestCase):
         from smartpower.ui.pages.data_management import DataManagementPage
         self.assertIsInstance(self.window.pages["data"], DataManagementPage)
         self.assertTrue(self.window.pages["data"].import_button.isEnabled())
-        for key in ("voltage", "current", "power", "anomalies", "reports"):
+        from smartpower.ui.pages.analysis import AnalysisPage
+        for key in ("voltage", "current", "power"):
+            with self.subTest(page=key):
+                page = self.window.pages[key]
+                self.assertIsInstance(page, AnalysisPage)
+                self.assertTrue(page.analyze_button.isEnabled())
+                self.assertIsNone(page.current_result)
+                self.assertEqual(page.summary.rowCount(), 0)
+        for key in ("anomalies", "reports"):
             with self.subTest(page=key):
                 texts = " ".join(w.text() for w in self.window.pages[key].findChildren(QLabel))
                 self.assertIn("待开发", texts)
