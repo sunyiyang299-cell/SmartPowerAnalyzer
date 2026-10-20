@@ -1,0 +1,42 @@
+{
+  "ordinary_launch": "PASS",
+  "normal_close": "PASS",
+  "no_python_git_path": true,
+  "independent_working_directory": true,
+  "clean_machine": false,
+  "--release-check": {
+    "version": "1.0.0",
+    "product": "智电析电力系统运行数据分析与可视化软件 V1.0",
+    "frozen": true,
+    "platform": "windows",
+    "socket_network": "disabled",
+    "steps": [
+      "eight_pages_native_navigation",
+      "csv_excel_import_and_sqlite_save",
+      "sqlite_history_read",
+      "voltage_current_power_analysis_curves_and_png",
+      "full_anomaly_detection_and_plot_link",
+      "pdf_and_excel_export_via_real_save_dialog",
+      "settings_saved",
+      "actual_gui_screenshots_paths_redacted"
+    ],
+    "events": 717,
+    "status": "PASS",
+    "records": 1000
+  },
+  "--release-reopen": {
+    "version": "1.0.0",
+    "product": "智电析电力系统运行数据分析与可视化软件 V1.0",
+    "frozen": true,
+    "platform": "windows",
+    "socket_network": "disabled",
+    "steps": [
+      "eight_pages_native_navigation",
+      "database_and_settings_preserved_after_restart"
+    ],
+    "status": "PASS",
+    "records": 1000
+  },
+  "exe_sha256": "0da0f585221b9ec6743a22a4a93087cc6fbafae5fcc2e561855238fd5d7d1bee",
+  "status": "PASS"
+}

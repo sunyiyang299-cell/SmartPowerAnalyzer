@@ -40,7 +40,7 @@ def test_snapshot_matches_v03_v04_and_source(report):
     np.testing.assert_array_equal(snapshot.analysis.power.active, reference.power.active)
     assert snapshot.detection == detection
     assert snapshot.source_label == "模拟数据，非真实设备测量"
-    assert snapshot.product_name == APP_NAME and snapshot.version == "0.9.0"
+    assert snapshot.product_name == APP_NAME and snapshot.version == "1.0.0"
 
 
 def test_one_read_immutable_snapshot_and_no_database_changes(report, monkeypatch):

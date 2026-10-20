@@ -1,0 +1,211 @@
+{
+  "tool": "stdlib PyPI JSON advisory query (not pip-audit)",
+  "date": "2026-10-20T15:26:10.960705+00:00",
+  "scope": "Installed runtime, dev and build distributions; PyPI version advisories only, not binary/OS/Qt component source audit",
+  "packages": [
+    {
+      "name": "PySide6",
+      "version": "6.10.3",
+      "source": "https://pypi.org/pypi/PySide6/6.10.3/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "PySide6_Addons",
+      "version": "6.10.3",
+      "source": "https://pypi.org/pypi/PySide6_Addons/6.10.3/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "PySide6_Essentials",
+      "version": "6.10.3",
+      "source": "https://pypi.org/pypi/PySide6_Essentials/6.10.3/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "Pygments",
+      "version": "2.21.0",
+      "source": "https://pypi.org/pypi/Pygments/2.21.0/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "altgraph",
+      "version": "0.17.5",
+      "source": "https://pypi.org/pypi/altgraph/0.17.5/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "charset-normalizer",
+      "version": "3.5.2",
+      "source": "https://pypi.org/pypi/charset-normalizer/3.5.2/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "colorama",
+      "version": "0.4.6",
+      "source": "https://pypi.org/pypi/colorama/0.4.6/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "et_xmlfile",
+      "version": "2.0.0",
+      "source": "https://pypi.org/pypi/et_xmlfile/2.0.0/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "iniconfig",
+      "version": "2.3.1",
+      "source": "https://pypi.org/pypi/iniconfig/2.3.1/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "numpy",
+      "version": "2.5.4",
+      "source": "https://pypi.org/pypi/numpy/2.5.4/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "openpyxl",
+      "version": "3.1.5",
+      "source": "https://pypi.org/pypi/openpyxl/3.1.5/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "packaging",
+      "version": "26.3",
+      "source": "https://pypi.org/pypi/packaging/26.3/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "pandas",
+      "version": "3.0.6",
+      "source": "https://pypi.org/pypi/pandas/3.0.6/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "pefile",
+      "version": "2024.8.26",
+      "source": "https://pypi.org/pypi/pefile/2024.8.26/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "pillow",
+      "version": "13.0.0",
+      "source": "https://pypi.org/pypi/pillow/13.0.0/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "pip",
+      "version": "26.2.1",
+      "source": "https://pypi.org/pypi/pip/26.2.1/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "pluggy",
+      "version": "1.7.0",
+      "source": "https://pypi.org/pypi/pluggy/1.7.0/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "pyinstaller",
+      "version": "6.22.3",
+      "source": "https://pypi.org/pypi/pyinstaller/6.22.3/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "pyinstaller-hooks-contrib",
+      "version": "2026.8",
+      "source": "https://pypi.org/pypi/pyinstaller-hooks-contrib/2026.8/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "pypdf",
+      "version": "6.21.1",
+      "source": "https://pypi.org/pypi/pypdf/6.21.1/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "pyqtgraph",
+      "version": "0.14.0",
+      "source": "https://pypi.org/pypi/pyqtgraph/0.14.0/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "pytest",
+      "version": "9.1.1",
+      "source": "https://pypi.org/pypi/pytest/9.1.1/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "python-dateutil",
+      "version": "2.9.0.post0",
+      "source": "https://pypi.org/pypi/python-dateutil/2.9.0.post0/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "pywin32-ctypes",
+      "version": "0.2.3",
+      "source": "https://pypi.org/pypi/pywin32-ctypes/0.2.3/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "reportlab",
+      "version": "5.0.1",
+      "source": "https://pypi.org/pypi/reportlab/5.0.1/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "setuptools",
+      "version": "84.2.0",
+      "source": "https://pypi.org/pypi/setuptools/84.2.0/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "shiboken6",
+      "version": "6.10.3",
+      "source": "https://pypi.org/pypi/shiboken6/6.10.3/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "six",
+      "version": "1.17.0",
+      "source": "https://pypi.org/pypi/six/1.17.0/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    },
+    {
+      "name": "tzdata",
+      "version": "2026.5",
+      "source": "https://pypi.org/pypi/tzdata/2026.5/json",
+      "status": "PASS",
+      "vulnerabilities": []
+    }
+  ],
+  "status": "PASS"
+}
