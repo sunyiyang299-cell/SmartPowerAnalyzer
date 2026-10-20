@@ -9,6 +9,7 @@ from smartpower.config import APP_NAME, APP_VERSION
 from smartpower.ui.pages.home import HomePage
 from smartpower.ui.pages.registry import PAGE_SPECS
 from smartpower.ui.widgets import label
+from smartpower.ui.paths import default_settings_manager
 
 
 class MainWindow(QMainWindow):
@@ -53,14 +54,16 @@ class MainWindow(QMainWindow):
                 page.navigate_requested.connect(self.navigate)
         for key in ("voltage", "current", "power"):
             self.pages["anomalies"].detection_changed.connect(self.pages[key].receive_detection)
+        self.pages["settings"].settings_saved.connect(self.pages["reports"].apply_preferences)
         navigation.addStretch()
-        navigation.addWidget(label(f"V{APP_VERSION} · 可视化与检测", "muted"))
+        navigation.addWidget(label(f"V{APP_VERSION} · 专业分析报告", "muted"))
         layout.addWidget(sidebar)
         layout.addWidget(self.stack, 1)
         self.setCentralWidget(workspace)
         self.navigation_group.idClicked.connect(self.stack.setCurrentIndex)
         self.stack.currentChanged.connect(self._sync_navigation)
         self._sync_navigation(0)
+        self.navigate(default_settings_manager().load().value.startup_page)
 
     def navigate(self, key: str) -> None:
         """Route by stable key; invalid routes must not silently select a page."""

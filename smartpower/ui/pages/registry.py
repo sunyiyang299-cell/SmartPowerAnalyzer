@@ -5,12 +5,12 @@ from typing import Callable
 
 from PySide6.QtWidgets import QWidget
 
-from smartpower.ui.pages.features import FeaturePage
 from smartpower.ui.pages.analysis import AnalysisPage
 from smartpower.ui.pages.anomaly import AnomalyPage
 from smartpower.ui.pages.data_management import DataManagementPage
 from smartpower.ui.pages.home import HomePage
 from smartpower.ui.pages.settings import SettingsPage
+from smartpower.ui.pages.reports import ReportsPage
 
 
 @dataclass(frozen=True)
@@ -27,8 +27,6 @@ PAGE_SPECS = (
     PageSpec("current", "电流分析", lambda: AnalysisPage("current")),
     PageSpec("power", "功率分析", lambda: AnalysisPage("power")),
     PageSpec("anomalies", "异常检测", AnomalyPage),
-    PageSpec("reports", "分析报告", lambda: FeaturePage(
-        "分析报告", "整理真实分析过程与结果，形成可追溯的报告。",
-        "计划支持汇总数据来源、分析参数、图表和结论。当前未实现报告生成或导出。")),
+    PageSpec("reports", "分析报告", ReportsPage),
     PageSpec("settings", "系统设置", SettingsPage),
 )

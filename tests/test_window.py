@@ -87,11 +87,13 @@ class WindowTests(unittest.TestCase):
         self.assertFalse(anomaly.enabled_check.isChecked())
         self.assertEqual(anomaly.event_model.rowCount(), 0)
         self.assertTrue(anomaly.analyze_button.isEnabled())
-        for key in ("reports",):
-            with self.subTest(page=key):
-                texts = " ".join(w.text() for w in self.window.pages[key].findChildren(QLabel))
-                self.assertIn("待开发", texts)
-                self.assertIn("未执行电气计算或生成分析结果", texts)
+        from smartpower.ui.pages.reports import ReportsPage
+        reports = self.window.pages["reports"]
+        self.assertIsInstance(reports, ReportsPage)
+        self.assertIsNone(reports.current_snapshot)
+        self.assertFalse(reports.detection_enabled.isChecked())
+        self.assertTrue(reports.pdf_button.isEnabled())
+        self.assertTrue(reports.excel_button.isEnabled())
 
     def test_resize_and_native_window_state_support(self):
         flags = self.window.windowFlags()

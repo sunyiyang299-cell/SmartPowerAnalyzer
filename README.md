@@ -1,6 +1,6 @@
 # 智电析电力系统运行数据分析与可视化软件 V1.0
 
-Windows 桌面软件，开发版本 **V0.4.0 数据可视化与异常检测系统**。按本次确认使用 64 位 Python 3.13。
+Windows 桌面软件，开发版本 **V0.5.0 专业分析报告与系统设置**。按本次确认使用 64 位 Python 3.13。
 产品正式名称中的 V1.0 与开发版本分别管理。V0.1 的八个页面、导航、首页入口和原生窗口操作均保留。
 
 ## 安装与运行
@@ -10,7 +10,7 @@ Windows 桌面软件，开发版本 **V0.4.0 数据可视化与异常检测系�
 ```powershell
 git clone https://github.com/sunyiyang299-cell/SmartPowerAnalyzer.git
 cd SmartPowerAnalyzer
-git switch feature/v0.4-visualization-anomaly
+git switch feature/v0.5-reports-settings
 py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe main.py
@@ -18,7 +18,73 @@ py -3.13 -m venv .venv
 
 如果没有 Python Launcher，可用指向 Python 3.13 的 `python` 替代 `py -3.13`。
 直接调用虚拟环境的 Python，无需修改 PowerShell 执行策略。当前提供源码运行，尚无 `.exe` 安装包。
-运行依赖为 PySide6、Pandas、NumPy、PyQtGraph 和 Excel 引擎 openpyxl；SQLite 是 Python 标准库。
+运行依赖为 PySide6、Pandas、NumPy、PyQtGraph、openpyxl 和 ReportLab；SQLite 是 Python 标准库。ReportLab 的 Pillow、charset-normalizer 依赖由 pip 安装。PDF 检查库 pypdf 仅用于开发测试。
+
+## V0.5 专业报告与系统设置
+
+保留 V0.1～V0.4 的全部数据管理、分析、图表和异常检测功能。报告完全离线生成，不使用在线报告服务，不修改 SQLite 模式或原始采样值。
+
+### 生成报告
+
+1. 在数据管理保存数据集。
+2. 进入“分析报告”，点击“刷新数据集”，选择数据集，核对名称、来源和已保存记录数。
+3. 填写报告标题。默认不执行异常检测；需要时勾选“在本次报告中执行用户阈值检测”，填写电压下限/上限 V、电流上限 A。
+4. 点击“生成 PDF 报告”或“生成 Excel 报告”，选择已有目录及正确扩展名。覆盖已有文件必须确认，默认不覆盖。
+5. 等待后台生成。完成后显示实际保存路径及本次报告的数据集来源；错误信息会明确显示。
+
+报告生成读取一次仓库数据，校验后形成不可变 `ReportSnapshot`：唯一标识、软件名称/版本、数据集 ID/名称/来源、采样数、最早/最晚时间、带 UTC 时区的生成时间、全部统计、逐点功率、原始时间/数值、阈值和完整事件。
+统计与功率复用 V0.3，检测复用 V0.4，曲线使用 V0.4 同一份排序视图与原始索引映射。数组以不可写 bytes 缓冲区固定，不从已有界面截图取图，不受其他页面选择影响。
+
+文件对话框期间配置或选择改变会取消本次导出；任务启动后固定数据集 ID、标题、阈值和字体配置。用户通过程序改动配置，或在设置页保存新偏好时，已启动任务仍按原快照完成，并明确提示该文件对应启动时数据集；不把旧报告状态当成当前选择结果。
+导出采用同目录临时文件，写完后原子改名/替换；缺少目录不会自动创建，失败不替换旧目标。目标已被其它程序占用时请关闭占用程序后重试。
+
+### PDF 内容与字体
+
+A4 中文技术报告包括封面、数据概况、电压统计/曲线、电流统计/曲线、P/S/|Q|及功率因数统计/曲线、检测状态与阈值、全部异常明细、说明与限制，附页码与来源页脚。跨页表格重复表头；曲线是从本次快照生成的矢量图，可保留缩放清晰度。
+每曲线最多约1800个极值代表点，仅减少绘图点数；统计、事件及原始数据不抽稀。时间排序稳定，重复时间保留，横轴显示实际日期时间；原始时间和数值仍保留在快照/Excel。
+
+默认使用 ReportLab 的标准 PDF 中文字体 **STSong-Light 引用**，不依赖某个 Windows 字体路径，不向仓库提交字体文件。它不嵌入字体，PDF 阅读器须支持中文/亚洲字体包；离线跨电脑分发时，建议配置可嵌入中文 TrueType 字体：
+
+1. 合法取得包含报告字符、允许嵌入的中文 `.ttf` 或 TrueType `.ttc` 字体；TTC 使用首个字面，CFF/OpenType `.otf` 不支持。
+2. 系统设置 → PDF 中文字体 → 选择字体 → 保存设置。
+3. 重新生成 PDF。导出器检查文件、字体格式和报告所需字形；缺失/无效/缺字会明确拒绝，不生成缺字报告。
+4. 清空字体路径并保存可恢复标准引用。字体仅在本地使用，不上传，不自动下载安装字体。
+
+标准引用对非 BMP 字符（例如部分 emoji/生僻字）明确拒绝，需选择覆盖这些字符的 TrueType 字体。嵌入模式使用字体默认实例；用户须自行核对其许可。开发验证曾使用 [Noto CJK 官方字体](https://github.com/notofonts/noto-cjk/tree/main/Sans/Variable/TTF/Subset) 及其 [SIL OFL 1.1 许可](https://github.com/notofonts/noto-cjk/blob/main/Sans/LICENSE)，实际检查生成 PDF 的 FontFile2 嵌入流；该字体不随项目分发。
+ReportLab 开源工具采用 [BSD 许可](https://docs.reportlab.com/developerfaqs/)，字体引用/嵌入方式见 [官方字体说明](https://docs.reportlab.com/reportlab/userguide/ch3_fonts/)。本阶段尚未制作 EXE，后续打包需附带所有实际依赖及字体适用的许可和资源，不能只复制程序代码。
+
+### Excel 内容与限制
+
+真实 `.xlsx` 包含“报告概况、电压分析、电流分析、功率分析、异常检测、原始数据”六个工作表。统计值为数值单元格；时间为 Excel 原生日期，另有“精确时间文本”保留原始纳秒精度。各采样表按原始保存顺序完整导出，含中文表头、单位、样式、列宽、冻结和筛选。
+写入采用 openpyxl 流式工作簿；数据集名称、标题等文本强制写为文本单元格，即使以 `= + - @` 开头也不生成公式。
+每表上限 1,048,576 行（含统计区/表头）；任何数据表或事件表超限均拒绝整个导出，不静默截断。功率表预留16行，因此单次原始采样上限为1,048,560行，异常表另受事件行数限制。Excel 日期接受1900～9999年，超出则拒绝；PDF不受该日期约束。Excel 原生日期/数值有自身精度限制，精确时间文本可追溯；不承诺 Excel 具备任意高精度数值能力。
+
+未执行异常检测会明确写“本次未执行异常检测”，不会写成零异常；执行后无事件才写“未检测到符合当前阈值条件的异常记录”。事件总数和唯一异常采样点分别统计。用户阈值不是国家标准限值，不代表设备合格。
+模拟来源从元数据传到封面、概况、曲线、页脚及 Excel 原始数据：“模拟数据，非真实设备测量”。导入文件仅表示来源未核验，不证明设备测量真实性。
+
+### 系统设置
+
+可保存默认报告目录、默认图表目录、默认报告标题、启动页面及 PDF 字体。导出目录必须为已有绝对目录，程序不会静默创建它们。
+点击“保存设置”写入 Qt 用户配置目录下的版本化 JSON（界面显示实际路径），同目录临时文件写完后原子替换。仅这个专用配置目录会在用户明确保存/确认恢复时创建。设置不写入源码或安装目录，不保存密码，不改变 `SMARTPOWER_DB_PATH` 及 SQLite 默认路径规则。
+默认目录为用户文档目录；该目录不存在时使用用户主目录。默认图表目录用于 PNG 保存对话框，报告默认目录用于 PDF/XLSX。已保存设置重启读取；启动页面在重启后生效，其它默认值用于后续导出。恢复默认设置必须确认，确认后保存默认值，取消不改设置。
+损坏、版本不兼容或失效路径会提示并暂用默认设置，保留原文件；只有用户明确保存才替换。报告中心遇到失效设置会要求先到系统设置确认保存，避免缺失字体被无提示换成标准引用。测试/便携配置可设置 `SMARTPOWER_SETTINGS_PATH` 指向独立 JSON，不影响数据库环境变量。
+
+### V0.5 测试与范围
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m pytest tests/test_reporting.py tests/test_settings.py tests/test_reports_settings_ui.py -q
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m compileall -q main.py smartpower tests
+.\.venv\Scripts\python.exe -m pip check
+git diff --check
+```
+
+Windows 原生 GUI 复验：设置 `$env:QT_QPA_PLATFORM = "windows"`，运行 `tests/test_reports_settings_ui.py` 以及所有历史 GUI 测试。实际结果、样例文件验证和未验证范围见 [V0.5 验证记录](docs/VALIDATION_V0.5.md)。
+只支持单相正弦稳态交流模型；无功为绝对值，PF平均为采样算术平均，不作时间加权。报告不构成设备安全或标准符合性认证，不代替计量仪器校准，模拟数据不是测量证据。
+报告及事件快照仍在内存中，PDF全部异常明细可能产生大量页面；后台任务保持界面可用，但不承诺无限数据量或任意文件规模。尚未进行用户人工验收、真实设备验证或 EXE 打包。
+
+新增 `reporting/`、`settings/` 及 `ui/pages/reports.py`；核心报告/设置逻辑与 GUI 分离，无新增数据库表。新增运行依赖 ReportLab，复用 openpyxl；pypdf 仅开发测试使用。
 
 ## V0.4 曲线可视化与异常检测
 
@@ -270,6 +336,6 @@ requirements-dev.txt            测试依赖
 ```
 
 数据处理和数据库模块不依赖 Qt。界面通过后台任务调用它们，模型更新仅在 GUI 线程执行；新增分析算法仍应放在独立服务中。
-异常检测页已实现用户阈值检测；报告页继续保留待开发说明。分析页仅展示实际计算结果，模拟数据保留模拟标记。
+异常检测页支持用户阈值，报告页支持离线 PDF / Excel，系统设置可持久化。分析页仅展示实际计算结果，模拟数据保留模拟标记。
 
 接口参考：[Pandas read_excel](https://pandas.pydata.org/docs/reference/api/pandas.read_excel.html)、[Qt 表格模型](https://doc.qt.io/qtforpython-6.6/PySide6/QtCore/QAbstractTableModel.html)、[Qt QThread](https://doc.qt.io/qtforpython-6.10/PySide6/QtCore/QThread.html)。
