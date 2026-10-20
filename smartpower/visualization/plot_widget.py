@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 
 from smartpower.visualization.export import save_png
 from smartpower.visualization.time_axis import SampleTimeAxis
+from smartpower.ui.paths import default_settings_manager
 
 
 class TimePlotWidget(QWidget):
@@ -242,7 +243,8 @@ class TimePlotWidget(QWidget):
             self.message.emit("请先分析当前数据集，再导出图表。")
             return
         revision = self._revision
-        path, _ = QFileDialog.getSaveFileName(self, "导出当前图表 PNG", "曲线.png", "PNG 图像 (*.png)",
+        settings = default_settings_manager().load().value
+        path, _ = QFileDialog.getSaveFileName(self, "导出当前图表 PNG", str(Path(settings.chart_directory) / "曲线.png"), "PNG 图像 (*.png)",
                                              options=QFileDialog.Option.DontConfirmOverwrite)
         if not path:
             return
