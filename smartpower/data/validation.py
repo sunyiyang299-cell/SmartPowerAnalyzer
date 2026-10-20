@@ -74,7 +74,14 @@ def validate_frame(raw: pd.DataFrame) -> pd.DataFrame:
                    "无效时间，请使用年-月-日 时:分:秒；不接受数字时间戳或时区")
         else:
             # Strings exclude booleans and complex values as well as nonnumeric text.
-            values = pd.to_numeric(text, errors="coerce").astype(float)
+            if (pd.api.types.is_numeric_dtype(series.dtype)
+                    and not pd.api.types.is_bool_dtype(series.dtype)
+                    and not pd.api.types.is_complex_dtype(series.dtype)):
+                # Preserve native numeric precision, especially nextafter values
+                # on strict anomaly thresholds; avoid float -> text -> float.
+                values = series.astype(float)
+            else:
+                values = pd.to_numeric(text, errors="coerce").astype(float)
             invalid = ~np.isfinite(values.to_numpy())
             record(~missing_mask & invalid, column, "必须为有限的合法数值")
             if column == "功率因数":

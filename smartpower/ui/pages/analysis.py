@@ -15,12 +15,13 @@ from smartpower.ui.paths import default_database_path
 from smartpower.ui.power_series_model import PowerSeriesModel
 from smartpower.ui.tasks import TaskThread
 from smartpower.ui.widgets import label
+from smartpower.visualization.plot_widget import TimePlotWidget
 
 
 class AnalysisPage(BasePage):
     operation_finished = Signal()
 
-    def __init__(self, mode: str, parent=None, repository=None):
+    def __init__(self, mode: str, parent=None, repository=None, with_chart=True):
         titles = {"voltage": "电压分析", "current": "电流分析", "power": "功率分析"}
         super().__init__(titles[mode], "选择 V0.2 已保存的数据集，点击“开始分析”读取并计算；可手动重新分析。", parent)
         self.content.setContentsMargins(24, 20, 24, 20)
@@ -32,6 +33,8 @@ class AnalysisPage(BasePage):
         self._callback = None
         self._revision = 0
         self._task_revision = 0
+        self._detection_snapshot = None
+        self.chart = TimePlotWidget(mode) if with_chart else None
         self.dataset_combo = QComboBox()
         self.dataset_combo.setPlaceholderText("请选择已保存的数据集")
         self.dataset_combo.setMinimumContentsLength(10)
@@ -55,6 +58,9 @@ class AnalysisPage(BasePage):
         self.progress.setRange(0, 0)
         self.progress.hide()
         self.content.addWidget(self.progress)
+        if self.chart is not None:
+            self.content.addWidget(self.chart)
+            self.chart.message.connect(self.notify)
         self.summary = QTableWidget(0, 3)
         self.summary.setHorizontalHeaderLabels(["统计指标", "计算结果", "单位"])
         self.summary.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -81,7 +87,9 @@ class AnalysisPage(BasePage):
             note = "全部电流为有效值，单位 A；最大值是采样有效值最大值，不是交流瞬时峰值。总体标准差使用 ddof=0。"
         else:
             note = "全部电压为有效值，单位 V；总体标准差使用 ddof=0。所有采样点等权统计，不作时间加权。"
-        if mode == "power":
+        if not with_chart:
+            pass
+        elif mode == "power":
             self.content.insertWidget(2, label(note, "muted"))
         else:
             self.content.addWidget(label(note, "muted"))
@@ -98,6 +106,8 @@ class AnalysisPage(BasePage):
 
     def _clear_results(self):
         self.current_result = None
+        if self.chart is not None:
+            self.chart.clear()
         self.summary.setRowCount(0)
         self.series_model.set_result(None)
         self.series_title.hide()
@@ -200,5 +210,13 @@ class AnalysisPage(BasePage):
             for column, text in enumerate((name, format(value, ".12g"), unit)):
                 self.summary.setItem(row, column, QTableWidgetItem(text))
         self.current_result = result
+        if self.chart is not None:
+            self.chart.set_result(result)
+            self.chart.set_detection(self._detection_snapshot)
         self.metadata.setPlainText(f"数据集：{result.dataset_name}\n采样记录：{result.count} 条 · 来源：{result.source}")
         self.notify("分析完成。结果基于当前已保存数据集；可再次点击“开始分析”重新读取和计算。")
+
+    def receive_detection(self, detection):
+        self._detection_snapshot = detection
+        if self.chart is not None:
+            self.chart.set_detection(detection)

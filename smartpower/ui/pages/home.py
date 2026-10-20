@@ -12,10 +12,10 @@ class HomePage(BasePage):
 
     def __init__(self, parent=None):
         super().__init__("首页", "欢迎使用智电析，集中管理电力系统运行数据与分析工作。", parent)
-        self.content.addWidget(label("V0.3 电气参数分析", "badge"))
+        self.content.addWidget(label("V0.4 可视化与异常检测", "badge"))
         self.content.addWidget(card(
             "从运行数据开始",
-            "前往数据管理导入 CSV / Excel 并保存。电压、电流和功率分析页可选择已保存数据集，计算统计指标与逐点功率；图表和报告将在后续实现。",
+            "前往数据管理导入 CSV / Excel 并保存。分析页提供统计指标、逐点功率和时间曲线；异常检测页可启用用户阈值并联动曲线标记。报告生成待后续实现。",
         ))
         self.content.addWidget(card(
             "数据来源清晰可见",

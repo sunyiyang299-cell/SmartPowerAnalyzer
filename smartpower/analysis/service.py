@@ -12,6 +12,7 @@ from smartpower.analysis.voltage import analyze_voltage
 from smartpower.data.importer import Dataset
 from smartpower.data.validation import validate_frame
 from smartpower.storage.repository import DatasetRepository
+from smartpower.visualization.snapshot import PlotSamples, prepare_samples
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,7 @@ class DatasetAnalysis:
     voltage: Statistics | None
     current: Statistics | None
     power: PowerAnalysis | None
+    samples: PlotSamples | None = None
 
 
 def analyze_dataset(dataset: Dataset, mode: str = "all", dataset_id: int | None = None) -> DatasetAnalysis:
@@ -42,7 +44,7 @@ def analyze_dataset(dataset: Dataset, mode: str = "all", dataset_id: int | None 
     times = frame["时间"].to_numpy(copy=True)
     times.setflags(write=False)
     return DatasetAnalysis(dataset_id, dataset.name, dataset.source, dataset.simulated,
-                           len(frame), times, voltage, current, power)
+                           len(frame), times, voltage, current, power, prepare_samples(frame))
 
 
 def analyze_saved_dataset(repository: DatasetRepository, dataset_id: int, mode: str = "all") -> DatasetAnalysis:
