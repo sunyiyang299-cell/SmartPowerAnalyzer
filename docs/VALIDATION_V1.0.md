@@ -17,10 +17,10 @@ python -m pytest -q
 python -m compileall -q main.py smartpower tests tools
 python -m pip check
 python -m PyInstaller --noconfirm --clean --distpath ../v10-dist --workpath ../v10-build packaging/SmartPowerAnalyzer.spec
-python tools/verify_frozen.py ../v10-dist/SmartPowerAnalyzer ../v10-frozen-delivery
+python tools/verify_frozen.py ../v10-dist/SmartPowerAnalyzer ../v10-short-notices-exe
 # 用已验证的官方Inno6.7.3 ISCC编译SmartPowerAnalyzer.iss，传入实际DistDir与ReleaseDir
-python tools/verify_installer.py ../v10-release/SmartPowerAnalyzer-Setup-1.0.0.exe ../v10-installation-delivery
-python tools/make_release.py ../v10-dist/SmartPowerAnalyzer ../v10-release
+python tools/verify_installer.py ../v10-release-final/SmartPowerAnalyzer-Setup-1.0.0.exe ../v10-short-installation-check
+python tools/make_release.py ../v10-dist/SmartPowerAnalyzer ../v10-release-final
 python tools/verify_quality_exports.py ../v10-performance-100000/0
 git diff --check
 ```
@@ -37,11 +37,14 @@ git diff --check
 6. 当前用户Inno安装、开始菜单/可选桌面任务、卸载不清理用户数据；安全隔离验证器拒绝已有安装注册和已有验证目录。
 7. 原创SVG及16/32/48/64/256多尺寸ICO，保留生成脚本。没有借用第三方商标或未经授权字体。
 
+8. 首次深层ZIP解压出现普通MAX_PATH失败；许可文件采用短摘要文件名，inventory保留原wheel路径和内容，补充回归后重建。旧ZIP不作为最终交付。
+9. 首轮远程发行CI因WinError1400失效HWND失败；关闭验证逐次枚举当前PID可见窗口，只重试1400，其他错误仍失败；新增回归并重新执行全量测试。最终CI状态见PR Checks。
+
 ## 实际测试结果
 
 详见[TEST_REPORT_V1.0.md](TEST_REPORT_V1.0.md)，不把计划/源码验证扩展为安装器结果。
 
-- 基线311 passed/24子测试，68.75秒；最终offscreen318 passed/24子测试，79.14秒；原生Qt318 passed/24子测试，100.25秒；均0失败、0跳过。
+- 基线311 passed/24子测试，68.75秒；最终offscreen321 passed/24子测试，89.30秒；原生Qt321 passed/24子测试，94.57秒；均0失败、0跳过。
 - compileall、pip check、PowerShell语法、实际Inno编译、git diff --check通过。
 - 普通EXE可见窗口、官方标题与正常关闭；实际冻结全业务1000条模拟记录、717事件，两种导入、SQLite、分析、曲线、PNG、PDF/XLSX真实保存对话框、设置和新进程重读通过。
 - 子进程PATH不含Python/Git，cwd不含源码，完整复制包在中文路径运行；宿主仍安装Python，不能称为独立无Python机器。
@@ -70,12 +73,12 @@ PyPI JSON版本公告实际查询29个安装分发，首次pip24.2命中CVE-2025
 
 | 文件 | 字节 | SHA-256 |
 |---|---:|---|
-| RELEASE_NOTES_V1.0.md | 2779 | `8a0d57736eed1d18af556c42081add7ababc68e5dc2ecbb99b243dd70c8c1d67` |
-| SmartPowerAnalyzer-Portable-1.0.0.zip | 72408635 | `67fe2c55ba04ca252ade6ec6ddb90ba10b6d05d2d50de8126d362ccb63aa8968` |
-| SmartPowerAnalyzer-Setup-1.0.0.exe | 51083599 | `54bdfaaddf86474a1d9062cac68426d65f3fe0fa116731ae2584d8195dbdb5a1` |
+| RELEASE_NOTES_V1.0.md | 2938 | `1631fcef547d18a47d43459e10d4bdd55def6c71355289642baec6ebb419076d` |
+| SmartPowerAnalyzer-Portable-1.0.0.zip | 72406312 | `dd83f8294a015d2a6e03b277b0037f7bf11b2b835e12b7a7f1628d9aca3eda83` |
+| SmartPowerAnalyzer-Setup-1.0.0.exe | 51090479 | `a929e4e5e6b5d3aaf96cf1b583e1ddc3d359e9be36d16c013adcb80fd98f1943` |
 | USER_MANUAL_V1.0.pdf | 959470 | `8fd1822815837b18eb7677dff9fba9089ab44505854ae4aed3ed84663ed4b287` |
 
-完整onedir主程序SmartPowerAnalyzer.exe：SHA256 `0da0f585221b9ec6743a22a4a93087cc6fbafae5fcc2e561855238fd5d7d1bee`；ZIP实际1025个文件条目，CRC校验通过；EXE自身不单独代替整个运行目录。
+完整onedir主程序SmartPowerAnalyzer.exe：SHA256 `f16ff52d6797f19f8eae57437957f6164b7b140ce66ee914c2fdaa81047e07d6`；ZIP实际1025个文件条目，CRC校验通过；重新从最终ZIP深层解压并运行全业务/重启验证通过，证据docs/quality/portable-v1.0.json；EXE自身不单独代替整个运行目录。
 
 ## 文档、软著与范围
 

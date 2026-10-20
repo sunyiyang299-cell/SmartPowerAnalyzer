@@ -13,8 +13,8 @@ import time
 TITLE='智电析电力系统运行数据分析与可视化软件 V1.0'
 
 
-def normal_launch(exe, cwd, env):
-    process=subprocess.Popen([str(exe)],cwd=cwd,env=env)
+def close_visible_window(pid, is_running):
+    """Require a live titled window; Qt may recreate HWNDs during startup/DPI."""
     user=ctypes.WinDLL('user32',use_last_error=True)
     user.GetWindowThreadProcessId.argtypes=[wintypes.HWND,ctypes.POINTER(wintypes.DWORD)]
     user.GetWindowTextLengthW.argtypes=[wintypes.HWND]
@@ -25,25 +25,37 @@ def normal_launch(exe, cwd, env):
     user.EnumWindows.argtypes=[callback_type,wintypes.LPARAM]
     found=[]
     def callback(handle, parameter):
-        pid=wintypes.DWORD()
-        user.GetWindowThreadProcessId(handle,ctypes.byref(pid))
-        if pid.value==process.pid and user.IsWindowVisible(handle):
+        owner=wintypes.DWORD()
+        user.GetWindowThreadProcessId(handle,ctypes.byref(owner))
+        if owner.value==pid and user.IsWindowVisible(handle):
             length=user.GetWindowTextLengthW(handle)
             text=ctypes.create_unicode_buffer(length+1)
             user.GetWindowTextW(handle,text,length+1)
-            if text.value==TITLE: found.append(handle)
+            if text.value==TITLE:found.append(handle)
         return True
     listener=callback_type(callback)
+    deadline=time.monotonic()+60
+    first_visible=None
+    while time.monotonic()<deadline:
+        assert is_running(), 'EXE exited before normal-close verification'
+        found.clear()
+        user.EnumWindows(listener,0)
+        if found:
+            if first_visible is None:first_visible=time.monotonic()
+            if time.monotonic()-first_visible>=1:
+                # Never reuse an HWND saved before initial paint. Re-enumerate
+                # each attempt; retry only ERROR_INVALID_WINDOW_HANDLE.
+                if user.PostMessageW(found[0],0x10,0,0):return
+                error=ctypes.get_last_error()
+                if error!=1400:raise ctypes.WinError(error)
+        time.sleep(.1)
+    raise AssertionError('No live visible EXE main window ready for normal close')
+
+
+def normal_launch(exe, cwd, env):
+    process=subprocess.Popen([str(exe)],cwd=cwd,env=env)
     try:
-        deadline=time.monotonic()+60
-        while time.monotonic()<deadline and process.poll() is None and not found:
-            user.EnumWindows(listener,0)
-            time.sleep(.1)
-        assert found, 'No visible real EXE main window with official title'
-        # HWND visibility occurs during synchronous ShowWindow. Let Qt finish
-        # the initial paint/show event before exercising normal close.
-        time.sleep(1)
-        assert user.PostMessageW(found[0],0x0010,0,0), ctypes.WinError(ctypes.get_last_error())
+        close_visible_window(process.pid, lambda:process.poll() is None)
         assert process.wait(timeout=30)==0
     finally:
         if process.poll() is None:

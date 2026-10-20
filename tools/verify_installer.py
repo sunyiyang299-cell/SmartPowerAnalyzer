@@ -15,7 +15,7 @@ import time
 import uuid
 import winreg
 
-from verify_frozen import normal_launch, TITLE
+from verify_frozen import normal_launch, TITLE, close_visible_window
 
 KEY=r'Software\Microsoft\Windows\CurrentVersion\Uninstall\{CF8757AD-241E-49A0-8CCE-B1EA917D976A}_is1'
 
@@ -38,28 +38,8 @@ def shortcut_launch(path, environment):
     kernel.WaitForSingleObject.argtypes=[wintypes.HANDLE,wintypes.DWORD]
     kernel.CloseHandle.argtypes=[wintypes.HANDLE]
     pid=kernel.GetProcessId(info.hProcess)
-    user=ctypes.WinDLL('user32',use_last_error=True)
-    CB=ctypes.WINFUNCTYPE(wintypes.BOOL,wintypes.HWND,wintypes.LPARAM)
-    user.EnumWindows.argtypes=[CB,wintypes.LPARAM]
-    user.GetWindowThreadProcessId.argtypes=[wintypes.HWND,ctypes.POINTER(wintypes.DWORD)]
-    user.GetWindowTextW.argtypes=[wintypes.HWND,wintypes.LPWSTR,ctypes.c_int]
-    user.PostMessageW.argtypes=[wintypes.HWND,wintypes.UINT,wintypes.WPARAM,wintypes.LPARAM]
-    user.IsWindowVisible.argtypes=[wintypes.HWND]
-    found=[]
-    def callback(handle, parameter):
-        owner=wintypes.DWORD();user.GetWindowThreadProcessId(handle,ctypes.byref(owner))
-        if owner.value==pid and user.IsWindowVisible(handle):
-            text=ctypes.create_unicode_buffer(400);user.GetWindowTextW(handle,text,len(text))
-            if text.value==TITLE:found.append(handle)
-        return True
-    handler=CB(callback)
     try:
-        deadline=time.monotonic()+60
-        while time.monotonic()<deadline and not found:
-            user.EnumWindows(handler,0);time.sleep(.1)
-        assert found,'Start Menu shortcut did not open the real main window'
-        time.sleep(1)  # Finish Qt initial show/paint before normal-close check.
-        assert user.PostMessageW(found[0],0x10,0,0), ctypes.WinError(ctypes.get_last_error())
+        close_visible_window(pid,lambda:kernel.WaitForSingleObject(info.hProcess,0)==258)
         assert kernel.WaitForSingleObject(info.hProcess,30000)==0
         kernel.GetExitCodeProcess.argtypes=[wintypes.HANDLE,ctypes.POINTER(wintypes.DWORD)]
         exit_code=wintypes.DWORD()

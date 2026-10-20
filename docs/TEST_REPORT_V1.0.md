@@ -13,8 +13,8 @@ Windows11 x64 build26200，Python3.13.0，独立新venv安装锁定依赖，PyIn
 | 项目 | 状态 | 实际证据 |
 |---|---|---|
 | V0.9/main基线 | PASS | PR1～6已合并，main54e90b1与V0.9最终代码树相同；311 passed、24子测试，68.75秒 |
-| 最终源码offscreen全量 | PASS | 318 passed、24 subtests passed，79.14秒；0 failed/0 skipped |
-| 最终Windows原生Qt全量 | PASS | 318 passed、24 subtests passed，100.25秒；0 failed/0 skipped |
+| 最终源码offscreen全量 | PASS | 321 passed、24 subtests passed，89.30秒；0 failed/0 skipped |
+| 最终Windows原生Qt全量 | PASS | 321 passed、24 subtests passed，94.57秒；0 failed/0 skipped |
 | 语法/依赖/差异 | PASS | compileall、pip check及git diff --check；PowerShell脚本解析通过，Inno脚本真实编译 |
 | EXE属性 | PASS | FileVersion/ProductVersion=1.0.0，正式名称与OriginalFilename正确；windowed、asInvoker |
 | 实际冻结EXE普通启动与关闭 | PASS | Windows顶层可见窗口/PID/正式标题核对，初始化完成后WM_CLOSE正常退出0；不是仅检查文件存在 |
@@ -23,6 +23,7 @@ Windows11 x64 build26200，Python3.13.0，独立新venv安装锁定依赖，PyIn
 | 安装目录/开始菜单启动 | PASS | 安装目录EXE及实际.lnk经ShellExecuteEx启动，核对真实窗口并正常关闭 |
 | 安装后业务 | PASS | 实际安装EXE运行同一1000条模拟数据业务验证，PDF/XLSX生成并重开 |
 | 卸载/重装 | PASS | 初次卸载数据/设置/报告逐字节保留，重装后读取原两数据集和启动设置，再卸载清理安装目录、QA快捷方式组及卸载项 |
+| 最终便携ZIP实际解压运行 | PASS | 1025条目CRC、此前失败的深层路径解压成功；解压后独立中文目录EXE全业务/重启通过，证据portable-v1.0.json |
 | 可选桌面快捷方式 | NOT TESTED | 脚本有未默认勾选任务，本机验收未选桌面任务，未改用户已有桌面 |
 | 独立无Python/Git电脑 | NOT TESTED | 只做清除子进程Python/Git PATH、独立cwd/完整复制包验证，不能据此宣称独立干净机通过 |
 | Windows10/不同账号/真实系统DPI | NOT TESTED | 无相应独立实机；原125%/150%为Qt缩放自动化 |
@@ -44,7 +45,10 @@ Windows11 x64 build26200，Python3.13.0，独立新venv安装锁定依赖，PyIn
 2. 即时关闭自动化曾超时。补充“窗口必须在活动事件循环显示”回归，修复前1 failed，调整显示为QTimer进入循环后1 passed；外部验证也需等首次paint/show完成，不能把Win32初现可见当成界面已就绪。最终普通关闭与安装后关闭都实际通过。
 3. 首次文件对话框自动选择未改变默认文件名，导致验证器找不到期望文件；修正验证器使用真实Qt文件名控件，不改业务导出逻辑或数值断言，随后通过。
 4. Inno工具安装在沙箱因HKCU权限失败，后在授权的当前用户工具安装中成功；再验证/PORTABLE=1工具部署成功。未把工具安装失败写成通过。
-5. 保留全部历史失败场景测试，没有删除测试或改变数值容差掩盖错误。中间317项全量之后增加启动回归，最终318项全量重新执行。
+5. 保留全部历史失败场景测试，没有删除测试或改变数值容差掩盖错误。中间318项全量之后增加许可路径和失效窗口句柄回归，最终321项全量重新执行。
+
+6. 首次便携ZIP深层解压失败：许可文件重复携带dist-info层级触发普通MAX_PATH。许可收集改为短摘要加原文件名，逐字保留内容，并在inventory记录原wheel路径；补充重名/内容/来源回归。重新构建后按原深层目录实际解压和运行，结果见便携验证记录。
+7. 首轮远程发行CI在关闭窗口时遇到WinError1400，后续安装按设计停止。验证器改为每次枚举同一PID的新可见窗口，仅重试失效句柄；新增两项回归保证不会忽略权限等其他错误。最终CI结果另见PR Checks。
 
 ## 性能
 
