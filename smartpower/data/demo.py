@@ -46,6 +46,12 @@ def export_demo(dataset: Dataset, path: str | Path) -> None:
 
 def main() -> None:
     import argparse
+    import sys
+    # Redirected output on English Windows can default to cp1252. Use UTF-8
+    # explicitly so a successful export never fails while printing its result.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description="生成 1000 条模拟单相交流数据，非真实设备测量。")
     parser.add_argument("--output", type=Path, default=Path("模拟数据.csv"), help="输出 CSV 路径")
     parser.add_argument("--overwrite", action="store_true", help="明确允许覆盖已有文件")

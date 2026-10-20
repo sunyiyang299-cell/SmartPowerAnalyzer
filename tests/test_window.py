@@ -105,4 +105,4 @@ class WindowTests(unittest.TestCase):
             self.window.navigate(spec.key)
             self.app.processEvents()
             page = self.window.pages[spec.key]
-            self.assertLessEqual(page.widget().minimumSizeHint().width(), page.viewport().width())
+            self.assertLessEqual(page.widget().minimumSizeHint().width(), page.viewport().width(), spec.key)

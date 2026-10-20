@@ -223,3 +223,20 @@ def test_confirmation_dialog_defaults_to_chinese_cancel(page):
     accepted = DataManagementPage._confirm(page, "删除数据集", "确认测试", "确认删除")
     assert not accepted
     assert observed == ["取消"]
+
+
+def test_long_database_path_does_not_expand_minimum_page_width(app, tmp_path, monkeypatch):
+    from smartpower.ui.main_window import MainWindow
+    monkeypatch.setenv("SMARTPOWER_DB_PATH", str(tmp_path / ("long_ascii_directory_" * 10) / "data.sqlite3"))
+    window = MainWindow()
+    window.resize(900, 620)
+    window.navigate("data")
+    window.show()
+    app.processEvents()
+    page = window.pages["data"]
+    try:
+        assert page.widget().minimumSizeHint().width() <= page.viewport().width()
+    finally:
+        window.close()
+        window.deleteLater()
+        app.processEvents()

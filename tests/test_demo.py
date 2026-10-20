@@ -53,13 +53,17 @@ def test_independent_generator_cli_and_overwrite_guard(tmp_path):
     from pathlib import Path
     import subprocess
     import sys
+    import os
     path = tmp_path / "命令行模拟.csv"
     command = [sys.executable, "-m", "smartpower.data.demo", "--output", str(path)]
     root = Path(__file__).resolve().parents[1]
-    result = subprocess.run(command, cwd=root, capture_output=True, timeout=30)
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "cp1252"
+    result = subprocess.run(command, cwd=root, env=env, capture_output=True, timeout=30)
     assert result.returncode == 0, result.stderr
+    assert "已导出" in result.stdout.decode("utf-8")
     assert len(import_file(path).frame) == 1000
     original = path.read_bytes()
-    result = subprocess.run(command, cwd=root, capture_output=True, timeout=30)
+    result = subprocess.run(command, cwd=root, env=env, capture_output=True, timeout=30)
     assert result.returncode != 0
     assert path.read_bytes() == original

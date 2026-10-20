@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from PySide6.QtCore import QStandardPaths, Qt, Signal
+from PySide6.QtGui import QTextOption
 from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QFileDialog, QHBoxLayout, QLineEdit,
     QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QTableView,
@@ -111,7 +112,14 @@ class DataManagementPage(BasePage):
         self.message.setMaximumHeight(110)
         self.message.setVisible(False)
         self.content.insertWidget(2, self.message)
-        self.content.addWidget(label(f"本地数据库：{self.repository.path}\n点击“刷新历史”读取历史；导入不会自动保存。", "muted"))
+        self.database_info = QPlainTextEdit()
+        self.database_info.setReadOnly(True)
+        self.database_info.setAccessibleName("本地数据库路径")
+        self.database_info.setWordWrapMode(QTextOption.WrapMode.WrapAnywhere)
+        self.database_info.setFixedHeight(60)
+        self.database_info.setPlainText(
+            f"本地数据库：{self.repository.path}\n点击“刷新历史”读取历史；导入不会自动保存。")
+        self.content.addWidget(self.database_info)
         self._controls = (self.import_button, self.demo_button, self.save_button, self.export_button,
                           self.refresh_button, self.load_button, self.delete_button, self.history_combo,
                           self.name_edit, self.filter_column, self.filter_edit, self.filter_button, self.clear_button)

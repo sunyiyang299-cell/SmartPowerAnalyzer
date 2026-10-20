@@ -22,16 +22,18 @@
 | 导入与校验 | 首批 CSV、Excel、空文件、字段和非法值测试 | 22 项通过 |
 | 存储与校验复验 | repository、旧 database、importer | 31 项通过 |
 | 模拟数据及查询 | demo、query | 首批 5 项通过 |
-| 数据管理界面 | 生成、预览、筛选、排序、保存、读取、删除、失败保留和后台响应 | 首批 5 项通过，扩展后 9 项通过 |
-| 最终完整回归 | `python -m pytest -q`，Qt offscreen | **60 passed，26 subtests passed** |
-| 最终原生 Windows GUI | `python -m pytest tests/test_window.py tests/test_data_ui.py tests/test_entrypoint.py -q`，Qt windows | **17 passed，21 subtests passed** |
+| 数据管理界面 | 生成、预览、筛选、排序、保存、读取、删除、失败保留和后台响应 | 首批 5 项通过，扩展后 10 项通过 |
+| 最终完整回归 | `python -m pytest -q`，Qt offscreen | **61 passed，26 subtests passed** |
+| 最终原生 Windows GUI | `python -m pytest tests/test_window.py tests/test_data_ui.py tests/test_entrypoint.py -q`，Qt windows | **18 passed，21 subtests passed** |
 | 依赖 | `python -m pip check` | No broken requirements found |
 | 语法 | `python -m compileall -q main.py smartpower tests` | 通过 |
 | 差异格式 | `git diff --check` | 通过 |
 
-完整套件最后一次执行耗时 10.89 秒，原生 GUI 复跑耗时 7.31 秒；仅代表本机此次执行。原生测试是完整套件中相关用例的重复验证，不是另外 17 个独立功能。
+完整套件最后一次执行耗时 13.33 秒，原生 GUI 复跑耗时 7.43 秒；仅代表本机此次执行。原生测试是完整套件中相关用例的重复验证，不是另外 18 个独立功能。
 
 测试期间曾遇到并处理：沙箱默认临时目录无写权限（将 TEMP、TMP 及 basetemp 指向工作目录）；混合时间格式测试夹具需明确 format；历史列表需默认选中首条；模型重置时需避免递归请求排序；滚动条断言需等待 Qt 布局完成。对应失败用例均保留并重跑通过，没有删除用例来规避失败。
+
+首次远程 Windows CI 发现两处额外问题：英文系统的 cp1252 重定向输出无法打印中文，以及较长英文数据库路径撑大最小页面宽度。已先用强制 cp1252 子进程和超长 ASCII 路径在本地复现失败，再分别修复为显式 UTF-8 命令行输出和可任意位置换行的只读路径框。原失败用例保留，新增路径回归测试后，完整套件为上述 61 项。
 
 事务测试通过 SQLite 触发器主动制造中途插入/删除失败，验证已有数据集、采样记录和预览保持可用；GUI 测试验证错误提示及重试按钮。中文删除确认框测试验证默认按钮为“取消”。
 
