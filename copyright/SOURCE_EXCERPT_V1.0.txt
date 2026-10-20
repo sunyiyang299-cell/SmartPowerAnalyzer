@@ -1,0 +1,3524 @@
+软件：智电析电力系统运行数据分析与可视化软件 V1.0
+版本：1.0.0
+源码Git Commit：0d8d871ad6755808732f8ba3683e4fe4ad00b33c
+材料生成UTC：2026-10-20T16:04:05.464294+00:00
+仅为源程序交存候选汇编；生成日期不是软件完成/首次发表日期，不声明符合全部登记格式。
+仅包含项目main.py与smartpower/*.py，不含第三方库源码、字体或缓存。
+
+===== 来源文件：main.py；原始行数：7；SHA256：eeecf6f202893750142f915d727bf7259c022bd1fea384de713e82bad34c4fe4 =====
+"""Windows desktop entry point."""
+
+from smartpower.application import main
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+===== 来源文件：smartpower/__init__.py；原始行数：1；SHA256：959a1bbc08bfceec12f5d2721b525d2c971e7679bf4f387152b586da62fb5df9 =====
+"""智电析：电力系统运行数据分析与可视化软件。"""
+
+===== 来源文件：smartpower/analysis/__init__.py；原始行数：1；SHA256：bba36c98121f0638603d1e0326c88300a2ef8be51fcb3ec9a962b4dee653dcc0 =====
+"""GUI-independent single-phase RMS electrical analysis."""
+
+===== 来源文件：smartpower/analysis/current.py；原始行数：7；SHA256：e696b00faec325ff4d8b1aa21ea1067dc323bb35e63bac5e0311c63b687ab095 =====
+"""Current RMS sample maximum is NOT an instantaneous AC peak."""
+
+from smartpower.analysis.statistics import Statistics, summarize
+
+
+def analyze_current(samples) -> Statistics:
+    return summarize(samples, "电流有效值", "A")
+
+===== 来源文件：smartpower/analysis/power.py；原始行数：54；SHA256：8daec32cd14d5100ce40f07faca7db4cc7013046798e023a3cbea40b151c17ba =====
+"""Single-phase sinusoidal steady-state power from nonnegative RMS inputs."""
+
+from dataclasses import dataclass
+
+import numpy as np
+
+from smartpower.analysis.power_factor import analyze_power_factor
+from smartpower.analysis.statistics import AnalysisError, Statistics, numeric_samples, summarize
+
+POWER_MODEL = "仅适用于单相正弦稳态交流：U、I 为有效值，PF 为 0～1 的非负功率因数。"
+POWER_LIMITATION = "无功功率仅为绝对值，不能判定感性/容性或超前/滞后；不适用于三相或非正弦谐波分析。"
+
+
+@dataclass(frozen=True)
+class PowerAnalysis:
+    active: np.ndarray
+    apparent: np.ndarray
+    reactive_abs: np.ndarray
+    active_statistics: Statistics
+    apparent_statistics: Statistics
+    reactive_abs_statistics: Statistics
+    power_factor_statistics: Statistics
+
+
+def analyze_power(voltage, current, power_factor) -> PowerAnalysis:
+    u = numeric_samples(voltage, "电压有效值")
+    i = numeric_samples(current, "电流有效值")
+    pf = numeric_samples(power_factor, "功率因数", upper=1.0)
+    if not (len(u) == len(i) == len(pf)):
+        raise AnalysisError("电压、电流与功率因数采样数量必须一致，不能广播计算。")
+    try:
+        with np.errstate(over="raise", invalid="raise", under="ignore"):
+            apparent = u * i
+            active = apparent * pf
+            # (1-pf)*(1+pf) is algebraically 1-pf**2, with less
+            # cancellation near unity. Invalid PF is rejected before this.
+            reactive = apparent * np.sqrt(np.maximum(0.0, (1.0 - pf) * (1.0 + pf)))
+    except FloatingPointError as exc:
+        raise AnalysisError("功率结果超出 float64 可表示范围，请检查单位与输入数量级。") from exc
+    if not all(np.isfinite(a).all() for a in (active, apparent, reactive)):
+        raise AnalysisError("功率结果包含非有限值，已拒绝本次计算。")
+    # A positive physical result rounded down to zero is unrepresentable,
+    # not a zero-load measurement. Exact zeros (U/I=0, PF=0 or PF=1) remain valid.
+    if (np.any((u > 0) & (i > 0) & (apparent == 0))
+            or np.any((apparent > 0) & (pf > 0) & (active == 0))
+            or np.any((apparent > 0) & (pf < 1) & (reactive == 0))):
+        raise AnalysisError("非零功率结果小于 float64 可表示范围，已拒绝将其当作零值输出。")
+    active_stats = summarize(active, "有功功率", "W")
+    apparent_stats = summarize(apparent, "视在功率", "VA")
+    reactive_stats = summarize(reactive, "无功功率绝对值 |Q|", "var")
+    pf_stats = analyze_power_factor(pf)
+    for array in (active, apparent, reactive):
+        array.setflags(write=False)
+    return PowerAnalysis(active, apparent, reactive, active_stats, apparent_stats, reactive_stats, pf_stats)
+
+===== 来源文件：smartpower/analysis/power_factor.py；原始行数：7；SHA256：ee9052a564b2d91a58a706183acf2605ff4a157f73f10c8b208707b7c9ff51d2 =====
+"""Arithmetic sample PF statistics, not an interval aggregate power factor."""
+
+from smartpower.analysis.statistics import Statistics, summarize
+
+
+def analyze_power_factor(samples) -> Statistics:
+    return summarize(samples, "功率因数（采样点）", "无量纲", upper=1.0)
+
+===== 来源文件：smartpower/analysis/service.py；原始行数：51；SHA256：c85e1bcd0dea445116bbd5daf91c600387d447a6469cdcf9aa6ea7875481e47b =====
+"""Reuse V0.2 Dataset, validation and repository without schema changes."""
+
+from dataclasses import dataclass
+
+import numpy as np
+import pandas as pd
+
+from smartpower.analysis.current import analyze_current
+from smartpower.analysis.power import PowerAnalysis, analyze_power
+from smartpower.analysis.statistics import AnalysisError, Statistics
+from smartpower.analysis.voltage import analyze_voltage
+from smartpower.data.importer import Dataset
+from smartpower.data.validation import validate_frame
+from smartpower.storage.repository import DatasetRepository
+from smartpower.visualization.snapshot import PlotSamples, prepare_samples
+
+
+@dataclass(frozen=True)
+class DatasetAnalysis:
+    dataset_id: int | None
+    dataset_name: str
+    source: str
+    simulated: bool
+    count: int
+    times: np.ndarray
+    voltage: Statistics | None
+    current: Statistics | None
+    power: PowerAnalysis | None
+    samples: PlotSamples | None = None
+
+
+def analyze_dataset(dataset: Dataset, mode: str = "all", dataset_id: int | None = None) -> DatasetAnalysis:
+    if not isinstance(dataset, Dataset) or not isinstance(dataset.frame, pd.DataFrame):
+        raise AnalysisError("分析输入必须是 V0.2 数据集对象及其数据表。")
+    if mode not in ("all", "voltage", "current", "power"):
+        raise AnalysisError("不支持的分析模块。")
+    frame = validate_frame(dataset.frame)
+    u = frame["电压"].to_numpy()
+    i = frame["电流"].to_numpy()
+    pf = frame["功率因数"].to_numpy()
+    voltage = analyze_voltage(u) if mode in ("all", "voltage") else None
+    current = analyze_current(i) if mode in ("all", "current") else None
+    power = analyze_power(u, i, pf) if mode in ("all", "power") else None
+    times = frame["时间"].to_numpy(copy=True)
+    times.setflags(write=False)
+    return DatasetAnalysis(dataset_id, dataset.name, dataset.source, dataset.simulated,
+                           len(frame), times, voltage, current, power, prepare_samples(frame))
+
+
+def analyze_saved_dataset(repository: DatasetRepository, dataset_id: int, mode: str = "all") -> DatasetAnalysis:
+    return analyze_dataset(repository.load(dataset_id), mode, dataset_id)
+
+===== 来源文件：smartpower/analysis/statistics.py；原始行数：69；SHA256：3c201e64375cd7f46e81fdf4726a507b16aa0b096a9085a46e701f84a0193b2e =====
+"""Validated float64 statistics with population (ddof=0) deviation."""
+
+from dataclasses import dataclass
+
+import numpy as np
+
+from smartpower.data.validation import DataError
+
+
+class AnalysisError(DataError):
+    """Invalid analysis input or an unrepresentable numerical result."""
+
+
+@dataclass(frozen=True)
+class Statistics:
+    quantity: str
+    unit: str
+    count: int
+    mean: float
+    maximum: float
+    minimum: float
+    population_std: float
+
+
+def numeric_samples(values, quantity: str, upper: float | None = None) -> np.ndarray:
+    """Accept one-dimensional real numeric samples; never coerce text/bools."""
+    try:
+        raw = np.asarray(values)
+        if raw.ndim != 1:
+            raise AnalysisError(f"{quantity}必须是一维数值序列。")
+        if raw.size == 0:
+            raise AnalysisError(f"{quantity}数据集为空，无法计算。")
+        if raw.dtype.kind not in "iuf" or (
+            isinstance(values, (list, tuple)) and any(isinstance(v, (bool, np.bool_)) for v in values)
+        ):
+            raise AnalysisError(f"{quantity}类型错误：仅接受实数，不接受文本、布尔值或复数。")
+        with np.errstate(over="raise", invalid="raise"):
+            samples = raw.astype(np.float64, copy=True)
+    except AnalysisError:
+        raise
+    except (TypeError, ValueError, OverflowError, FloatingPointError) as exc:
+        raise AnalysisError(f"{quantity}数据类型或数值范围无效。") from exc
+    if not np.isfinite(samples).all():
+        raise AnalysisError(f"{quantity}含 NaN 或 Infinity，无法计算。")
+    if np.any(samples < 0):
+        raise AnalysisError(f"{quantity}不得为负数。")
+    if upper is not None and np.any(samples > upper):
+        raise AnalysisError(f"{quantity}必须位于 0～{upper:g}（含端点）。")
+    return samples
+
+
+def summarize(values, quantity: str, unit: str, upper: float | None = None) -> Statistics:
+    samples = numeric_samples(values, quantity, upper)
+    maximum = float(np.max(samples))
+    minimum = float(np.min(samples))
+    # Subtract before scaling: dividing close large samples by their maximum
+    # destroys representable differences. Nonnegative inputs make the range
+    # finite; scaling that range also avoids overflow in squared deviations.
+    spread = maximum - minimum
+    if spread == 0:
+        mean, deviation = minimum, 0.0
+    else:
+        with np.errstate(over="raise", invalid="raise", under="ignore"):
+            normalized = (samples - minimum) / spread
+            mean = float(minimum + np.mean(normalized, dtype=np.float64) * spread)
+            deviation = float(np.std(normalized, dtype=np.float64, ddof=0) * spread)
+    if not np.isfinite([mean, deviation]).all():
+        raise AnalysisError(f"{quantity}统计结果超出 float64 数值范围。")
+    return Statistics(quantity, unit, int(samples.size), mean, maximum, minimum, deviation)
+
+===== 来源文件：smartpower/analysis/voltage.py；原始行数：7；SHA256：554ddc517e789bb83f6c00e2557429c6c6747d0a922a226aaa1c90a0eebef285 =====
+"""Voltage RMS statistics, in volts."""
+
+from smartpower.analysis.statistics import Statistics, summarize
+
+
+def analyze_voltage(samples) -> Statistics:
+    return summarize(samples, "电压有效值", "V")
+
+===== 来源文件：smartpower/anomaly/__init__.py；原始行数：1；SHA256：a0ffab4204438ed5081c513f41f0c0308f312530097eab5c98f1b5c76d9f1008 =====
+"""Independent full-data threshold detection; no Qt dependency."""
+
+===== 来源文件：smartpower/anomaly/detector.py；原始行数：32；SHA256：f497d2487342d8a9c50f81cf72f1ebea7d93e7c9f68d4346acd002f5e7f0ac6d =====
+"""Strict comparisons on every validated original sample, without mutation."""
+
+import numpy as np
+import pandas as pd
+
+from smartpower.anomaly.models import AnomalyEvent, DetectionResult, Thresholds
+from smartpower.data.validation import DataError, validate_frame
+from smartpower.data.importer import Dataset
+from smartpower.visualization.snapshot import frame_fingerprint
+
+
+def detect_anomalies(dataset, thresholds: Thresholds, dataset_id=None):
+    if not isinstance(dataset, Dataset) or not isinstance(dataset.frame, pd.DataFrame):
+        raise DataError("检测输入必须是 V0.2 数据集对象及其数据表。")
+    if not isinstance(thresholds, Thresholds):
+        raise DataError("请提供有效的用户阈值配置。")
+    frame = validate_frame(dataset.frame)
+    u, i = frame["电压"].to_numpy(), frame["电流"].to_numpy()
+    times = frame["时间"].to_numpy()
+    events = []
+    for mask, parameter, values, kind, limit, unit in (
+        (u < thresholds.voltage_lower, "电压", u, "电压偏低", thresholds.voltage_lower, "V"),
+        (u > thresholds.voltage_upper, "电压", u, "电压偏高", thresholds.voltage_upper, "V"),
+        (i > thresholds.current_upper, "电流", i, "电流偏高", thresholds.current_upper, "A"),
+    ):
+        events.extend(AnomalyEvent(dataset_id, int(row), times[row], parameter, float(values[row]),
+                                   kind, float(limit), unit, dataset.source)
+                      for row in np.flatnonzero(mask))
+    events.sort(key=lambda event: (event.row_index, event.kind))
+    return DetectionResult(dataset_id, dataset.name, dataset.source, dataset.simulated, len(frame),
+                           frame_fingerprint(frame), thresholds, tuple(events),
+                           len({event.row_index for event in events}))
+
+===== 来源文件：smartpower/anomaly/models.py；原始行数：57；SHA256：ed7341407e9d6a26862064e8a43da4c93e7673f0695a83eba184784d9c4ca6d9 =====
+"""Immutable threshold configuration and auditable anomaly events."""
+
+from dataclasses import dataclass
+from numbers import Real
+import math
+
+from smartpower.data.validation import DataError
+
+KINDS = ("电压偏低", "电压偏高", "电流偏高")
+DISCLAIMER = "异常检测结果仅供数据分析参考，不构成设备安全或电气标准符合性认证。"
+
+
+@dataclass(frozen=True)
+class Thresholds:
+    voltage_lower: float
+    voltage_upper: float
+    current_upper: float
+
+    def __post_init__(self):
+        for name, value in (("电压下限", self.voltage_lower), ("电压上限", self.voltage_upper),
+                            ("电流上限", self.current_upper)):
+            if isinstance(value, bool) or not isinstance(value, Real) or not math.isfinite(value) or value < 0:
+                raise DataError(f"{name}必须是非负有限数值，不允许 NaN 或 Infinity。")
+        if self.voltage_lower >= self.voltage_upper:
+            raise DataError("电压下限必须小于电压上限。")
+        if self.current_upper <= 0:
+            raise DataError("电流上限必须大于 0。")
+
+
+@dataclass(frozen=True)
+class AnomalyEvent:
+    dataset_id: int | None
+    row_index: int  # Zero-based original stored position; never time-sorted position.
+    timestamp: object
+    parameter: str
+    value: float
+    kind: str
+    threshold: float
+    unit: str
+    source: str
+
+
+@dataclass(frozen=True)
+class DetectionResult:
+    dataset_id: int | None
+    dataset_name: str
+    source: str
+    simulated: bool
+    count: int
+    fingerprint: str
+    thresholds: Thresholds
+    events: tuple[AnomalyEvent, ...]
+    unique_sample_count: int
+
+    @property
+    def type_counts(self):
+        return {kind: sum(event.kind == kind for event in self.events) for kind in KINDS}
+
+===== 来源文件：smartpower/anomaly/service.py；原始行数：7；SHA256：a6b8162a7d85f8ab79a8d7a8c55a910076d614dfd362ef27a387f9d9555ef818 =====
+"""Read a repository snapshot, then detect without changing SQLite data."""
+
+from smartpower.anomaly.detector import detect_anomalies
+
+
+def detect_saved_dataset(repository, dataset_id, thresholds):
+    return detect_anomalies(repository.load(dataset_id), thresholds, dataset_id)
+
+===== 来源文件：smartpower/application.py；原始行数：46；SHA256：64c77c67ce54097e7867f4faf3783fc8232ae16369adbc8b3942da8041e8c0a5 =====
+"""Application setup; importing this module does not start the event loop."""
+
+import sys
+
+from PySide6.QtGui import QFont, QIcon
+from PySide6.QtCore import QLibraryInfo, QTranslator, QTimer
+from PySide6.QtWidgets import QApplication
+
+from smartpower.config import APP_NAME, APP_VERSION, ORGANIZATION
+from smartpower.resources import resource_path
+from smartpower.ui.main_window import MainWindow
+from smartpower.ui.theme import LIGHT_THEME
+
+
+def create_application(argv: list[str] | None = None) -> QApplication:
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv if argv is None else argv)
+    app.setApplicationName(APP_NAME)
+    app.setApplicationVersion(APP_VERSION)
+    app.setWindowIcon(QIcon(str(resource_path("app.ico"))))
+    app.setOrganizationName(ORGANIZATION)
+    app.setStyle("Fusion")
+    app.setFont(QFont("Microsoft YaHei UI", 10))
+    app.setStyleSheet(LIGHT_THEME)
+    if not hasattr(app, "_chinese_translator"):
+        translator = QTranslator(app)
+        if translator.load("qtbase_zh_CN", QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)):
+            app.installTranslator(translator)
+        app._chinese_translator = translator
+    return app
+
+
+def main() -> int:
+    arguments = sys.argv[1:]
+    if arguments and arguments[0] in ("--release-check", "--release-reopen"):
+        if len(arguments) != 2:
+            return 2
+        from smartpower.release_check import run_release_check
+        return run_release_check(arguments[1], reopen=arguments[0] == "--release-reopen")
+    app = create_application()
+    window = MainWindow()
+    # Show inside the active event loop so an immediate native close cannot
+    # occur before QApplication can process its quit request.
+    QTimer.singleShot(0, window.show)
+    return app.exec()
+
+===== 来源文件：smartpower/config.py；原始行数：5；SHA256：d10e813721a1eddc5fdb0e6e7040436c8551693e99601fa156d47f875ddfe21c =====
+"""Application identity, separate from the framework release version."""
+
+APP_NAME = "智电析电力系统运行数据分析与可视化软件 V1.0"
+APP_VERSION = "1.0.0"
+ORGANIZATION = "SmartPowerAnalyzer"
+
+===== 来源文件：smartpower/data/__init__.py；原始行数：1；SHA256：d2170bf4285a52cc9aab942999e37b862ff0a216c676b9beeb76c1021c7cdda6 =====
+"""GUI-independent import, validation, demo generation and table queries."""
+
+===== 来源文件：smartpower/data/demo.py；原始行数：77；SHA256：570222caa465761731c86aed3e1d5219cf95ed94d688e06ebf293e9c31aef276 =====
+"""Clearly identified demo data, never equipment measurements."""
+
+import os
+from pathlib import Path
+import tempfile
+
+import numpy as np
+import pandas as pd
+
+from smartpower.data.importer import Dataset
+from smartpower.data.validation import DataError, SIMULATED_SOURCE, SOURCE_COLUMN, validate_frame
+
+
+def generate_demo(count: int = 1000, seed: int | None = 42) -> Dataset:
+    if not isinstance(count, int) or isinstance(count, bool) or count <= 0:
+        raise DataError("模拟数据条数必须为正整数。")
+    rng = np.random.default_rng(seed)
+    frame = pd.DataFrame({
+        "时间": pd.date_range("2026-01-01 00:00:00", periods=count, freq="s"),
+        "电压": rng.uniform(218, 242, count).round(3),
+        "电流": rng.uniform(0.5, 25, count).round(3),
+        "功率因数": rng.uniform(0.85, 1, count).round(4),
+    })
+    return Dataset("单相交流演示（模拟数据）", validate_frame(frame), simulated=True)
+
+
+def export_demo(dataset: Dataset, path: str | Path, *, overwrite: bool = False) -> None:
+    """Publish atomically; existing files require explicit overwrite consent."""
+    if not dataset.simulated:
+        raise DataError("此入口仅允许导出明确标记的模拟数据。")
+    path = Path(path)
+    frame = validate_frame(dataset.frame)
+    frame[SOURCE_COLUMN] = SIMULATED_SOURCE
+    temporary = None
+    try:
+        if path.exists() and not overwrite:
+            raise DataError("目标文件已存在，请确认覆盖后重试。")
+        with tempfile.NamedTemporaryFile(dir=path.parent, suffix=".tmp", delete=False) as handle:
+            temporary = Path(handle.name)
+        frame.to_csv(temporary, index=False, encoding="utf-8-sig")
+        if overwrite:
+            os.replace(temporary, path)
+        elif os.name == "nt":
+            os.rename(temporary, path)  # Windows refuses an existing destination.
+        else:
+            os.link(temporary, path)  # Exclusive publication also closes races.
+            temporary.unlink()
+    except OSError as exc:
+        raise DataError(f"导出失败：{exc}。原目标文件未被替换，请检查路径、权限或磁盘空间。") from exc
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def main() -> None:
+    import argparse
+    import sys
+    # Redirected output on English Windows can default to cp1252. Use UTF-8
+    # explicitly so a successful export never fails while printing its result.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
+    parser = argparse.ArgumentParser(description="生成 1000 条模拟单相交流数据，非真实设备测量。")
+    parser.add_argument("--output", type=Path, default=Path("模拟数据.csv"), help="输出 CSV 路径")
+    parser.add_argument("--overwrite", action="store_true", help="明确允许覆盖已有文件")
+    args = parser.parse_args()
+    if args.output.exists() and not args.overwrite:
+        parser.error("目标文件已存在。如需覆盖，请明确添加 --overwrite。")
+    try:
+        export_demo(generate_demo(), args.output, overwrite=args.overwrite)
+    except DataError as exc:
+        parser.error(str(exc))
+    print(f"已导出 1000 条模拟数据（非真实设备测量）：{args.output}")
+
+
+if __name__ == "__main__":
+    main()
+
+===== 来源文件：smartpower/data/importer.py；原始行数：60；SHA256：ef54217e7e499369ece2ae2d40da1a5a2c1ea738dfd0deb81e9d12b87121ed99 =====
+"""Pandas file readers, independent of Qt and persistence."""
+
+from dataclasses import dataclass
+from pathlib import Path
+
+import pandas as pd
+
+from smartpower.data.validation import (
+    DataError, IMPORTED_SOURCE, REQUIRED_COLUMNS, SIMULATED_SOURCE, SOURCE_COLUMN, validate_frame,
+)
+
+
+@dataclass
+class Dataset:
+    name: str
+    frame: pd.DataFrame
+    simulated: bool = False
+    warning: str = ""
+
+    @property
+    def source(self) -> str:
+        return SIMULATED_SOURCE if self.simulated else IMPORTED_SOURCE
+
+
+def import_file(path: str | Path) -> Dataset:
+    path = Path(path)
+    if path.suffix.lower() not in (".csv", ".xlsx"):
+        raise DataError("仅支持 .csv 和 .xlsx 文件。")
+    try:
+        if path.stat().st_size == 0:
+            raise DataError("文件为空，请选择包含表头和数据的文件。")
+        if path.suffix.lower() == ".csv":
+            try:
+                raw = pd.read_csv(path, encoding="utf-8-sig", dtype=object, header=None,
+                                  keep_default_na=False, skip_blank_lines=False)
+            except UnicodeDecodeError:
+                raw = pd.read_csv(path, encoding="gb18030", dtype=object, header=None,
+                                  keep_default_na=False, skip_blank_lines=False)
+        else:
+            raw = pd.read_excel(path, engine="openpyxl", sheet_name=0, header=None,
+                                dtype=object, keep_default_na=False)
+    except DataError:
+        raise
+    except pd.errors.EmptyDataError as exc:
+        raise DataError("文件为空或没有可识别的表头。") from exc
+    except Exception as exc:
+        raise DataError(f"无法读取文件“{path.name}”：{exc}。请检查文件格式、权限及是否损坏。") from exc
+    if raw.empty:
+        raise DataError("文件没有数据记录。")
+    headers = raw.iloc[0].tolist()
+    raw = raw.iloc[1:].reset_index(drop=True)
+    raw.columns = headers
+    frame = validate_frame(raw)
+    raw.columns = [str(c).strip().lstrip("\ufeff") for c in raw.columns]
+    simulated = SOURCE_COLUMN in raw and raw[SOURCE_COLUMN].astype(str).str.contains("模拟", regex=False).any()
+    extra = [c for c in raw.columns if c not in (*REQUIRED_COLUMNS, SOURCE_COLUMN)]
+    warning = ""
+    if extra:
+        warning = "以下额外字段不参与预览和保存：" + "、".join(extra)
+    return Dataset(path.stem, frame, bool(simulated), warning)
+
+===== 来源文件：smartpower/data/query.py；原始行数：20；SHA256：8426c7a22ad2c45ae189164bdf201bb0b3e91165147b7a626951b88ad29d9ee8 =====
+"""Vectorized view-index computation, called by background jobs."""
+
+import numpy as np
+
+from smartpower.data.importer import Dataset
+from smartpower.data.validation import REQUIRED_COLUMNS
+
+
+def query_rows(dataset: Dataset, text: str = "", column: str = "全部字段",
+               sort_column: int = 0, ascending: bool = True) -> np.ndarray:
+    frame = dataset.frame
+    if text.strip():
+        columns = list(REQUIRED_COLUMNS) if column == "全部字段" else [column]
+        mask = np.zeros(len(frame), dtype=bool)
+        for name in columns:
+            mask |= frame[name].astype(str).str.contains(text.strip(), case=False, regex=False).to_numpy()
+        frame = frame.loc[mask]
+    if 0 <= sort_column < len(REQUIRED_COLUMNS):
+        frame = frame.sort_values(REQUIRED_COLUMNS[sort_column], ascending=ascending, kind="stable")
+    return frame.index.to_numpy(dtype=np.int64)
+
+===== 来源文件：smartpower/data/validation.py；原始行数：95；SHA256：af3b19de8464ef353bf64848b37474679a44a91674ba5ef0b91d967abb1ed177 =====
+"""Single-phase RMS schema. Reject a batch rather than silently drop rows."""
+
+from dataclasses import dataclass
+
+import numpy as np
+import pandas as pd
+
+REQUIRED_COLUMNS = ("时间", "电压", "电流", "功率因数")
+SOURCE_COLUMN = "数据来源"
+SIMULATED_SOURCE = "模拟数据（非真实设备测量）"
+IMPORTED_SOURCE = "导入文件（来源未核验）"
+
+
+class DataError(ValueError):
+    """Actionable user-facing data error."""
+
+
+@dataclass(frozen=True)
+class Issue:
+    row: int
+    column: str
+    reason: str
+
+
+class ValidationError(DataError):
+    def __init__(self, issues: list[Issue], count: int):
+        self.issues = issues
+        self.count = count
+        detail = "\n".join(f"数据第 {i.row} 行 · {i.column}：{i.reason}" for i in issues)
+        super().__init__(f"校验失败，共 {count} 处错误（数据行从表头下一行开始计数）。\n{detail}"
+                         + ("\n仅展示前 40 处，请修正文件后重新导入。" if count > len(issues) else ""))
+
+
+def validate_frame(raw: pd.DataFrame) -> pd.DataFrame:
+    """Return a normalized copy, never mutate the input or invent values.
+
+    Times are local calendar strings or Excel datetime cells, without timezone.
+    Numeric epoch/Excel serial timestamps are rejected to avoid guessing units.
+    Extra columns are handled explicitly by the importer.
+    """
+    if raw.empty:
+        raise DataError("文件没有数据记录，请检查是否为空文件或只有表头。")
+    frame = raw.copy(deep=False)
+    columns = [str(c).strip().lstrip("\ufeff") for c in frame.columns]
+    if len(columns) != len(set(columns)):
+        raise DataError("存在重复字段名称，请为每一列使用唯一的表头。")
+    frame = frame.set_axis(columns, axis=1)
+    missing = [c for c in REQUIRED_COLUMNS if c not in columns]
+    if missing:
+        raise DataError("缺少必需字段：" + "、".join(missing))
+    result = pd.DataFrame(index=range(len(frame)))
+    issues: list[Issue] = []
+    count = 0
+
+    def record(mask, column, reason):
+        nonlocal count
+        positions = np.flatnonzero(np.asarray(mask, dtype=bool))
+        count += len(positions)
+        for pos in positions[:max(0, 40 - len(issues))]:
+            issues.append(Issue(int(pos) + 1, column, reason))
+
+    for column in REQUIRED_COLUMNS:
+        series = frame[column].reset_index(drop=True)
+        text = series.astype("string").str.strip()
+        missing_mask = series.isna() | text.eq("").fillna(False)
+        record(missing_mask, column, "缺失值")
+        if column == "时间":
+            calendar = text.str.match(
+                r"^\d{4}[-/]\d{1,2}[-/]\d{1,2}(?:[ T]\d{1,2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?)?$"
+            ).fillna(False)
+            values = pd.to_datetime(text.where(calendar).str.replace("/", "-"),
+                                    format="mixed", errors="coerce")
+            record(~missing_mask & values.isna(), column,
+                   "无效时间，请使用年-月-日 时:分:秒；不接受数字时间戳或时区")
+        else:
+            # Strings exclude booleans and complex values as well as nonnumeric text.
+            if (pd.api.types.is_numeric_dtype(series.dtype)
+                    and not pd.api.types.is_bool_dtype(series.dtype)
+                    and not pd.api.types.is_complex_dtype(series.dtype)):
+                # Preserve native numeric precision, especially nextafter values
+                # on strict anomaly thresholds; avoid float -> text -> float.
+                values = series.astype(float)
+            else:
+                values = pd.to_numeric(text, errors="coerce").astype(float)
+            invalid = ~np.isfinite(values.to_numpy())
+            record(~missing_mask & invalid, column, "必须为有限的合法数值")
+            if column == "功率因数":
+                record(~missing_mask & ~invalid & ((values < 0) | (values > 1)),
+                       column, "必须位于 0～1（含端点）")
+            else:
+                record(~missing_mask & ~invalid & (values < 0), column, "有效值不得为负数")
+        result[column] = values
+    if count:
+        raise ValidationError(issues, count)
+    return result
+
+===== 来源文件：smartpower/release_check.py；原始行数：217；SHA256：e2eb2a88aa49fa3dcf17fabe698135473a093d901616301cec400e5897d70141 =====
+"""Explicit isolated release verification for source and frozen Windows builds.
+
+Only writes to a newly created verification directory. No arbitrary scripts are
+loaded; re-open only accepts directories bearing this verifier's marker.
+"""
+from dataclasses import replace
+import json
+import os
+from pathlib import Path
+import socket
+import sys
+import traceback
+
+OWNER = 'SmartPowerAnalyzer-release-verification-v1'
+
+
+def run_release_check(directory, *, reopen=False):
+    root = Path(directory).resolve()
+    if reopen:
+        metadata = json.loads((root / 'verification.json').read_text(encoding='utf-8'))
+        if metadata.get('owner') != OWNER:
+            raise ValueError('只能重新打开由发行验证创建的隔离目录。')
+    else:
+        root.mkdir(parents=True, exist_ok=False)
+        (root / 'verification.json').write_text(json.dumps({'owner':OWNER}), encoding='utf-8')
+    os.environ['SMARTPOWER_DB_PATH'] = str(root / 'isolated.sqlite3')
+    os.environ['SMARTPOWER_SETTINGS_PATH'] = str(root / 'settings.json')
+    # Deny Python outbound sockets. This is not an OS-level physical disconnect.
+    def deny_network(*args, **kwargs):
+        raise RuntimeError('发行验证禁止网络连接')
+    socket.socket.connect = deny_network
+    socket.create_connection = deny_network
+    from PySide6.QtCore import QEventLoop, QTimer, Qt
+    from PySide6.QtWidgets import QFileDialog, QLabel, QLineEdit, QPlainTextEdit
+    from smartpower.application import create_application
+    from smartpower.config import APP_NAME, APP_VERSION
+    from smartpower.data.demo import generate_demo, export_demo
+    from smartpower.data.validation import SOURCE_COLUMN, SIMULATED_SOURCE
+    from smartpower.storage.repository import DatasetRepository
+    from smartpower.ui.main_window import MainWindow
+    from smartpower.ui.paths import default_settings_manager
+    from smartpower.visualization.export import save_png
+    import numpy as np
+    from openpyxl import load_workbook
+
+    app = create_application([])
+    app.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs, True)
+    if not reopen:
+        manager = default_settings_manager()
+        manager.save(replace(manager.defaults, report_directory=str(root), chart_directory=str(root)))
+    window = MainWindow()
+    window.show()
+    result = {'version':APP_VERSION, 'product':APP_NAME, 'frozen':bool(getattr(sys,'frozen',False)),
+              'platform':app.platformName(), 'socket_network':'disabled', 'steps':[]}
+    result_path = root / ('reopen-result.json' if reopen else 'result.json')
+
+    def step(name):
+        result['steps'].append(name)
+        result_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
+
+    def wait_idle(page):
+        if page.busy:
+            loop = QEventLoop()
+            timeout = QTimer()
+            timeout.setSingleShot(True)
+            timeout.timeout.connect(loop.quit)
+            page.operation_finished.connect(loop.quit)
+            timeout.start(120000)
+            loop.exec()
+            timeout.stop()
+            page.operation_finished.disconnect(loop.quit)
+        assert not page.busy, '后台任务超时'
+
+    def screenshot(key):
+        window.navigate(key)
+        page = window.pages[key]
+        page.verticalScrollBar().setValue(0)
+        edits = []
+        # Redact paths on actual widgets, preserving real computed data and UI.
+        for widget in page.findChildren(QLabel) + page.findChildren(QPlainTextEdit):
+            plain = isinstance(widget, QPlainTextEdit)
+            text = widget.toPlainText() if plain else widget.text()
+            if str(root) in text:
+                edits.append((widget, text, plain))
+                replaced = text.replace(str(root), '（隔离验证目录）')
+                widget.setPlainText(replaced) if plain else widget.setText(replaced)
+        fields = [edit for edit in page.findChildren(QLineEdit) if str(root) in edit.text()]
+        for field in fields:
+            field.setEchoMode(QLineEdit.EchoMode.Password)
+        app.processEvents()
+        shots = root / 'screenshots'
+        shots.mkdir(exist_ok=True)
+        assert window.grab().save(str(shots / f'{key}.png'))
+        for widget, text, plain in edits:
+            widget.setPlainText(text) if plain else widget.setText(text)
+        for field in fields:
+            field.setEchoMode(QLineEdit.EchoMode.Normal)
+
+    def choose_report(kind):
+        timer = QTimer()
+        timer.setInterval(50)
+        def accept():
+            for dialog in app.topLevelWidgets():
+                if isinstance(dialog, QFileDialog) and dialog.isVisible():
+                    dialog.setDirectory(str(root))
+                    dialog.findChild(QLineEdit, 'fileNameEdit').setText(f'发行验证报告.{kind}')
+                    timer.stop()
+                    dialog.accept()
+                    return
+        timer.timeout.connect(accept)
+        timer.start()
+        window.pages['reports'].start_export(kind)
+        timer.stop()
+        wait_idle(window.pages['reports'])
+        assert window.pages['reports'].current_snapshot is not None
+        assert (root / f'发行验证报告.{kind}').stat().st_size > 1000
+
+    def exercise():
+        try:
+            assert window.windowTitle() == APP_NAME and window.isVisible()
+            assert window.stack.count() == 8
+            for key in window.pages:
+                window.navigation_buttons[key].click()
+                app.processEvents()
+                assert window.stack.currentWidget() is window.pages[key]
+            step('eight_pages_native_navigation')
+            repository = DatasetRepository(root / 'isolated.sqlite3')
+            if reopen:
+                saved = repository.list_datasets()
+                assert len(saved) == 2
+                assert all(item['row_count'] == 1000 and item['simulated'] for item in saved)
+                assert default_settings_manager().load().value.startup_page == 'reports'
+                assert window.stack.currentWidget() is window.pages['settings']  # Last navigation above.
+                assert len(repository.load(saved[0]['id']).frame) == 1000
+                step('database_and_settings_preserved_after_restart')
+            else:
+                demo = generate_demo()
+                csv = root / '模拟输入.csv'
+                excel = root / '模拟输入.xlsx'
+                export_demo(demo, csv)
+                frame = demo.frame.copy()
+                frame[SOURCE_COLUMN] = SIMULATED_SOURCE
+                frame.to_excel(excel, index=False)
+                data = window.pages['data']
+                for path, name in [(csv,'发行验证模拟数据'), (excel,'Excel模拟导入')]:
+                    data.import_path(path)
+                    wait_idle(data)
+                    assert data.dataset.simulated and data.model.rowCount() == 1000
+                    data.name_edit.setText(name)
+                    data.save()
+                    wait_idle(data)
+                    assert not data.has_unsaved_data
+                step('csv_excel_import_and_sqlite_save')
+                data.refresh_history(); wait_idle(data)
+                data.history_combo.setCurrentIndex(data.history_combo.findData(1))
+                data.load_selected(); wait_idle(data)
+                assert data.dataset.name == '发行验证模拟数据'
+                step('sqlite_history_read')
+                for key in ['voltage','current','power']:
+                    page = window.pages[key]
+                    page.refresh_datasets(); wait_idle(page)
+                    page.dataset_combo.setCurrentIndex(page.dataset_combo.findData(1))
+                    page.analyze_button.click(); wait_idle(page)
+                    assert page.current_result.count == 1000 and page.current_result.simulated
+                    assert page.chart.curves
+                    if key == 'power':
+                        expected = data.dataset.frame['电压'] * data.dataset.frame['电流'] * data.dataset.frame['功率因数']
+                        np.testing.assert_allclose(page.current_result.power.active, expected, rtol=1e-12)
+                    save_png(page.chart.grab(), root / f'{key}.png')
+                step('voltage_current_power_analysis_curves_and_png')
+                anomaly = window.pages['anomalies']
+                anomaly.refresh_datasets(); wait_idle(anomaly)
+                anomaly.dataset_combo.setCurrentIndex(anomaly.dataset_combo.findData(1))
+                anomaly.apply_demo_preset(); anomaly.enabled_check.setChecked(True)
+                anomaly.analyze_button.click(); wait_idle(anomaly)
+                values = data.dataset.frame
+                expected_events = int((values['电压']<210).sum()+(values['电压']>230).sum()+(values['电流']>20).sum())
+                assert len(anomaly.current_result.events) == expected_events
+                result['events'] = expected_events
+                step('full_anomaly_detection_and_plot_link')
+                reports = window.pages['reports']
+                reports.refresh_datasets(); wait_idle(reports)
+                reports.dataset_combo.setCurrentIndex(reports.dataset_combo.findData(1))
+                reports.detection_enabled.setChecked(True)
+                for edit, value in zip(reports.threshold_inputs, ['210','230','20']): edit.setText(value)
+                choose_report('pdf'); choose_report('xlsx')
+                assert (root / '发行验证报告.pdf').read_bytes().startswith(b'%PDF-')
+                book = load_workbook(root / '发行验证报告.xlsx', read_only=True)
+                try:
+                    assert len(book.sheetnames) == 6
+                    assert sum(1 for _ in book['原始数据'].iter_rows(min_row=2)) == 1000
+                finally: book.close()
+                step('pdf_and_excel_export_via_real_save_dialog')
+                settings = window.pages['settings']
+                settings.startup_page.setCurrentIndex(settings.startup_page.findData('reports'))
+                settings.save_button.click()
+                assert default_settings_manager().load().value.startup_page == 'reports'
+                step('settings_saved')
+                for key in window.pages: screenshot(key)
+                step('actual_gui_screenshots_paths_redacted')
+            result['status'] = 'PASS'
+            result['records'] = 1000
+            result_path.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
+            window.close()
+            app.exit(0)
+        except Exception:
+            result['status'] = 'FAIL'
+            result['error'] = traceback.format_exc().replace(str(root), '<verification-directory>')
+            result_path.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
+            # Gracefully wait for started workers; never terminate a QThread.
+            for page in window.pages.values():
+                if getattr(page,'busy',False): wait_idle(page)
+            window.pages['data']._dirty = False
+            window.close()
+            app.exit(1)
+    QTimer.singleShot(150, exercise)
+    return app.exec()
+
+===== 来源文件：smartpower/reporting/__init__.py；原始行数：1；SHA256：a2181be5cb8c10a8421e5d60095f30d715509fe53219f8b2c3acb0569e6c5abe =====
+"""Offline reports from one validated dataset snapshot; no GUI dependency."""
+
+===== 来源文件：smartpower/reporting/chart_renderer.py；原始行数：57；SHA256：c8791b0b49bca20e92a5f5f5126867bedab0bdbc0e00ab21349804b47a5a1aba =====
+"""Offline vector charts from V0.4 samples; no UI grabs or power formulas."""
+
+import numpy as np
+from reportlab.graphics.shapes import Drawing, Line, PolyLine, String
+from reportlab.lib.colors import HexColor
+
+
+def representative_indices(values, limit=1800):
+    """Preserve bucket extrema for display only, retaining original time mapping."""
+    if len(values) <= limit:
+        return np.arange(len(values))
+    selected = {0, len(values) - 1}
+    for bucket in np.array_split(np.arange(len(values)), max(1, (limit - 2) // 2)):
+        selected.add(int(bucket[np.argmin(values[bucket])]))
+        selected.add(int(bucket[np.argmax(values[bucket])]))
+    return np.array(sorted(selected))
+
+
+def render_chart(snapshot, mode, font):
+    a, sample = snapshot.analysis, snapshot.analysis.samples
+    titles = {"voltage": "电压有效值时间曲线（V）", "current": "电流有效值时间曲线（A）",
+              "power": "单相功率曲线：P（W）、S（VA）、|Q|（var）"}
+    series = ({"voltage": [("电压有效值 V", sample.voltage, "#2563eb")],
+               "current": [("电流有效值 A", sample.current, "#16805d")],
+               "power": [("P（W）", a.power.active, "#2563eb"), ("S（VA）", a.power.apparent, "#16805d"),
+                         ("|Q|（var，绝对值）", a.power.reactive_abs, "#9b44b5")]}[mode])
+    drawing = Drawing(480, 260)
+    drawing.add(String(0, 247, titles[mode], fontName=font, fontSize=10, fillColor=HexColor("#183153")))
+    drawing.add(String(0, 230, snapshot.source_label, fontName=font, fontSize=8))
+    left, bottom, width, height = 64, 52, 406, 146
+    ymax = max(float(np.max(values)) for _, values, _ in series) or 1.0
+    xmax = float(sample.seconds[-1]) or 1.0
+    for j in range(5):
+        y = bottom + height * j / 4
+        drawing.add(Line(left, y, left + width, y, strokeColor=HexColor("#dce4ee"), strokeWidth=0.4))
+        drawing.add(String(left - 5, y - 3, f"{ymax * (j / 4):.5g}", textAnchor="end", fontName=font, fontSize=7))
+    drawing.add(Line(left, bottom, left, bottom + height, strokeColor=HexColor("#708198")))
+    drawing.add(Line(left, bottom, left + width, bottom, strokeColor=HexColor("#708198")))
+    for j in range(4):
+        seconds = xmax * j / 3 if sample.seconds[-1] else 0
+        stamp = sample.origin.astype("datetime64[ms]") + np.timedelta64(round(seconds * 1000), "ms")
+        date, time = np.datetime_as_string(stamp, unit="s").split("T")
+        x = left + width * j / 3
+        drawing.add(String(x, 35, date, textAnchor="middle", fontName=font, fontSize=7))
+        drawing.add(String(x, 24, time, textAnchor="middle", fontName=font, fontSize=7))
+    drawing.add(String(240, 7, "采样时间（本地无时区）；稳定时间排序，重复时间保留", textAnchor="middle", fontName=font, fontSize=8))
+    for k, (name, raw, color) in enumerate(series):
+        values = raw[sample.order]
+        indices = representative_indices(values)
+        points = np.column_stack((left + sample.seconds[indices] / xmax * width,
+                                  bottom + values[indices] / ymax * height)).ravel().tolist()
+        if len(indices) == 1:
+            points += [points[0] + 0.8, points[1]]
+        drawing.add(PolyLine(points, strokeColor=HexColor(color), strokeWidth=0.65))
+        drawing.add(Line(64 + k * 132, 213, 80 + k * 132, 213, strokeColor=HexColor(color)))
+        drawing.add(String(84 + k * 132, 210, name, fontName=font, fontSize=8))
+    return drawing
+
+===== 来源文件：smartpower/reporting/excel_exporter.py；原始行数：145；SHA256：75bef8467a4b791b6f9be4ca6e67401ecd7ba94776e2b6c3b7d427bed5a68060 =====
+"""Styled streaming XLSX with full original-order samples and literal text."""
+
+from datetime import datetime
+from math import ceil
+from unicodedata import east_asian_width
+
+import numpy as np
+import pandas as pd
+from openpyxl import Workbook
+from openpyxl.cell import WriteOnlyCell
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
+
+from smartpower.analysis.power import POWER_MODEL
+from smartpower.data.validation import DataError
+from smartpower.reporting.files import atomic_report
+from smartpower.reporting.models import LIMITATIONS, statistics_rows
+
+MAX_ROWS = 1_048_576
+
+
+def excel_time(value):
+    stamp = pd.Timestamp(value)
+    if stamp.year < 1900 or stamp.year > 9999:
+        raise DataError("Excel 原生日期支持本报告的 1900～9999 年范围，当前时间超出范围，已拒绝导出，未截断数据。")
+    return stamp.to_pydatetime(warn=False)
+
+
+def export_excel(snapshot, path, *, overwrite=False):
+    a = snapshot.analysis
+    events = snapshot.detection.events if snapshot.detection is not None else ()
+    # Power sheet: 13 statistics + heading/source/sample-header = 16 rows.
+    # Detection sheet: 13 rows before its first event; overview has 23 rows.
+    if max(a.count + 16, len(events) + 13, 23) > MAX_ROWS:
+        raise DataError("数据超过 Excel 单工作表行数容量（含表头和统计区），已拒绝导出；未截断原始数据或异常事件。")
+    # Fail before publication if any native date cannot be represented.
+    excel_time(snapshot.time_start)
+    excel_time(snapshot.time_end)
+    with atomic_report(path, ".xlsx", overwrite=overwrite) as temporary:
+        _write_workbook(snapshot, temporary)
+
+
+def _write_workbook(snapshot, temporary):
+    a = snapshot.analysis
+    events = snapshot.detection.events if snapshot.detection is not None else ()
+    book = Workbook(write_only=True)
+    row_numbers = {}
+    try:
+
+        def sheet(name, widths):
+            ws = book.create_sheet(name)
+            for j, width in enumerate(widths, 1):
+                ws.column_dimensions[get_column_letter(j)].width = width
+            return ws
+
+        def append(ws, values, *, header=False):
+            cells = []
+            lines = 1
+            for column, value in enumerate(values, 1):
+                if isinstance(value, np.generic):
+                    value = value.item()
+                cell = WriteOnlyCell(ws, value=value)
+                if isinstance(value, str):
+                    cell.data_type = "s"  # Literal text even when starting with =,+,-,@.
+                    width = ws.column_dimensions[get_column_letter(column)].width - 2
+                    text_width = sum(2 if east_asian_width(char) in "WF" else 1 for char in value)
+                    lines = max(lines, ceil(text_width / max(width, 1)))
+                elif isinstance(value, datetime):
+                    cell.number_format = "yyyy-mm-dd hh:mm:ss.000"
+                elif isinstance(value, (float, int)):
+                    cell.number_format = "0.###############"
+                if header:
+                    cell.font = Font(bold=True, color="183153")
+                    cell.fill = PatternFill("solid", fgColor="E9F0FA")
+                cell.alignment = Alignment(vertical="top", wrap_text=isinstance(value, str))
+                cells.append(cell)
+            row_numbers[ws.title] = row_numbers.get(ws.title, 0) + 1
+            ws.row_dimensions[row_numbers[ws.title]].height = max(20, lines * 15)
+            ws.append(cells)
+
+        overview = sheet("报告概况", (28, 105))
+        overview.freeze_panes = "A2"
+        append(overview, ("项目", "内容"), header=True)
+        for row in (("报告唯一标识", snapshot.report_id), ("软件名称", snapshot.product_name), ("开发版本", snapshot.version),
+                    ("报告标题", snapshot.title), ("数据集 ID", a.dataset_id), ("数据集名称", a.dataset_name),
+                    ("数据来源", snapshot.source_label), ("采样数量", a.count), ("起始时间", excel_time(snapshot.time_start)),
+                    ("结束时间", excel_time(snapshot.time_end)), ("生成时间", snapshot.created_at.isoformat()),
+                    ("计算模型", POWER_MODEL), ("检测状态", snapshot.detection_status),
+                    ("日期精度", "日期列为 Excel 原生日期；Excel 保存精度有限，原始纳秒精度时间另以精确时间文本列保留。")):
+            append(overview, row)
+        for text in LIMITATIONS:
+            append(overview, ("说明与限制", text))
+        stats = statistics_rows(snapshot)
+        for name, quantities, values, headers in (
+            ("电压分析", {a.voltage.quantity}, (a.samples.voltage,), ("时间", "电压有效值（V）", "精确时间文本")),
+            ("电流分析", {a.current.quantity}, (a.samples.current,), ("时间", "电流有效值（A）", "精确时间文本")),
+            ("功率分析", {a.power.active_statistics.quantity, a.power.apparent_statistics.quantity,
+                           a.power.reactive_abs_statistics.quantity, a.power.power_factor_statistics.quantity},
+             (a.power.active, a.power.apparent, a.power.reactive_abs, snapshot.power_factors),
+             ("时间", "有功功率 P（W）", "视在功率 S（VA）", "无功绝对值 |Q|（var）", "功率因数 PF（无量纲）", "精确时间文本")),
+        ):
+            rows = [row for row in stats if row[0] in quantities]
+            header_row = len(rows) + 3
+            ws = sheet(name, (28, 30, 30, 30, 30, 36))
+            ws.freeze_panes = f"A{header_row + 1}"
+            append(ws, ("参数", "统计指标", "数值", "单位"), header=True)
+            for row in rows:
+                append(ws, row)
+            append(ws, (snapshot.source_label,))
+            append(ws, headers, header=True)
+            for pos in range(a.count):
+                append(ws, (excel_time(a.times[pos]), *(float(v[pos]) for v in values), str(a.times[pos]).replace("T", " ")))
+            ws.auto_filter.ref = f"A{header_row}:{get_column_letter(len(headers))}{header_row + a.count}"
+        anomaly = sheet("异常检测", (14, 28, 22, 14, 22, 18, 22, 10, 40, 36))
+        anomaly.freeze_panes = "A2"
+        append(anomaly, ("检测项目", "内容"), header=True)
+        append(anomaly, ("检测状态", snapshot.detection_status))
+        append(anomaly, ("来源", snapshot.source_label))
+        if snapshot.detection is not None:
+            d, t = snapshot.detection, snapshot.thresholds
+            for row in (("电压下限（V）", t.voltage_lower), ("电压上限（V）", t.voltage_upper),
+                        ("电流上限（A）", t.current_upper), ("异常事件总数", len(d.events)),
+                        ("唯一异常采样点", d.unique_sample_count), *d.type_counts.items()):
+                append(anomaly, row)
+            append(anomaly, ("说明", "仅按用户阈值检测，等号不触发；阈值不是国家标准限值。"))
+            header_row = 13
+            append(anomaly, ("数据集 ID", "时间", "原始索引（从0起）", "参数", "采样值", "异常类型", "阈值", "单位", "来源", "精确时间文本"), header=True)
+            for e in events:
+                append(anomaly, (e.dataset_id, excel_time(e.timestamp), e.row_index, e.parameter, e.value,
+                                  e.kind, e.threshold, e.unit, e.source, str(e.timestamp).replace("T", " ")))
+            anomaly.freeze_panes = f"A{header_row + 1}"
+            anomaly.auto_filter.ref = f"A{header_row}:J{header_row + len(events)}"
+        raw = sheet("原始数据", (28, 24, 24, 26, 40, 36))
+        raw.freeze_panes = "A2"
+        append(raw, ("时间", "电压（V）", "电流（A）", "功率因数（无量纲）", "数据来源", "精确时间文本"), header=True)
+        for pos in range(a.count):
+            append(raw, (excel_time(a.times[pos]), float(a.samples.voltage[pos]), float(a.samples.current[pos]),
+                         float(snapshot.power_factors[pos]), snapshot.source_label, str(a.times[pos]).replace("T", " ")))
+        raw.auto_filter.ref = f"A1:F{a.count + 1}"
+        book.save(temporary)
+    finally:
+        for ws in book.worksheets:
+            if not ws.closed:
+                ws.close()
+        book.close()
+
+===== 来源文件：smartpower/reporting/files.py；原始行数：41；SHA256：c444f86360aeae46fd6c45ecfbac4cf68e29b45d5db95be9075008a1e5a89e17 =====
+"""Atomic report publication; exporters never touch the original target first."""
+
+from contextlib import contextmanager
+import os
+from pathlib import Path
+import tempfile
+
+from smartpower.data.validation import DataError
+
+
+@contextmanager
+def atomic_report(path, suffix, *, overwrite=False):
+    target = Path(path)
+    if target.suffix.lower() != suffix:
+        raise DataError(f"报告文件必须使用 {suffix} 扩展名。")
+    if not target.parent.is_dir():
+        raise DataError("保存目录不存在，请选择已有目录；未自动创建目录。")
+    temporary = None
+    try:
+        if target.exists() and not overwrite:
+            raise DataError("报告文件已存在，请先确认覆盖。")
+        with tempfile.NamedTemporaryFile(dir=target.parent, suffix=suffix, delete=False) as stream:
+            temporary = Path(stream.name)
+        yield temporary
+        if not temporary.stat().st_size:
+            raise DataError("报告为空，未发布文件。")
+        if overwrite:
+            os.replace(temporary, target)
+        elif os.name == "nt":
+            os.rename(temporary, target)
+        else:
+            os.link(temporary, target)
+            temporary.unlink()
+        temporary = None
+    except DataError:
+        raise
+    except Exception as exc:
+        raise DataError(f"报告导出失败：{exc}。已有文件未被本次失败写入替换。") from exc
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+===== 来源文件：smartpower/reporting/fonts.py；原始行数：45；SHA256：79f58d8f055dc4b5c34d1d8bc594a14fb2a8c70adba0f1039618e8f95874635a =====
+"""Standard PDF CJK reference or explicitly configured, embeddable TrueType."""
+
+from hashlib import sha256
+from pathlib import Path
+from threading import RLock
+
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+from reportlab.pdfbase.ttfonts import TTFont
+
+from smartpower.data.validation import DataError
+
+FONT_LOCK = RLock()
+
+
+def report_font(path=""):
+    with FONT_LOCK:
+        if not path:
+            name = "STSong-Light"
+            if name not in pdfmetrics.getRegisteredFontNames():
+                pdfmetrics.registerFont(UnicodeCIDFont(name))
+            return name
+        target = Path(path)
+        if not target.is_file() or target.suffix.lower() not in (".ttf", ".ttc"):
+            raise DataError("中文字体不可用，请在系统设置中选择具备嵌入许可的 TrueType .ttf/.ttc 文件；或清空路径使用标准中文字体引用。")
+        try:
+            name = "SPA_" + sha256(target.read_bytes()).hexdigest()[:20]
+            if name not in pdfmetrics.getRegisteredFontNames():
+                font = TTFont(name, str(target), validate=1)
+                # ReportLab rejects restricted embedding in its TrueType parser.
+                pdfmetrics.registerFont(font)
+            return name
+        except Exception as exc:
+            raise DataError(f"中文字体无法嵌入：{exc}。请选择具有许可且包含所需中文的 TrueType 字体，或清空路径使用标准引用。") from exc
+
+
+def ensure_glyphs(font_name, text):
+    if font_name == "STSong-Light":
+        missing = {c for c in text if ord(c) > 0xFFFF}
+    else:
+        mapping = pdfmetrics.getFont(font_name).face.charToGlyph
+        missing = {c for c in text if not c.isspace() and ord(c) not in mapping}
+    if missing:
+        codes = "、".join(f"U+{ord(c):04X}" for c in sorted(missing)[:12])
+        raise DataError(f"中文字体缺少报告所需字形（{codes}），未生成缺字报告；请在系统设置选择含这些字符且有嵌入许可的中文 TrueType 字体。")
+
+===== 来源文件：smartpower/reporting/models.py；原始行数：75；SHA256：14b6cd8cbb25a4a242c298fe083d8792b647b759dc4e91eb5afab5fec128d2a9 =====
+"""Immutable report metadata and original-order samples."""
+
+from dataclasses import dataclass
+from datetime import datetime
+
+import numpy as np
+
+from smartpower.analysis.service import DatasetAnalysis
+from smartpower.anomaly.models import DetectionResult, Thresholds
+from smartpower.data.validation import DataError
+
+DEFAULT_TITLE = "电力系统运行数据分析报告"
+NOT_DETECTED = "本次未执行异常检测。"
+NO_EVENTS = "未检测到符合当前阈值条件的异常记录。"
+LIMITATIONS = (
+    "导入文件仅表示来源未核验；模拟来源是用户可编辑标记，不具备防篡改证明能力。",
+    "采用单相正弦稳态功率模型，电压和电流均为有效值；不适用于三相或谐波功率分解。",
+    "无功功率仅计算绝对值 |Q|，不推断感性、容性、超前或滞后。",
+    "功率因数平均值为各采样点算术平均，不是整个时间段的综合功率因数。",
+    "全部采样点等权统计；非等间隔采样不进行时间加权，不计算电能。",
+    "异常阈值为用户配置条件，不是国家标准限值；报告不属于设备安全认证报告。",
+    "本报告不能代替专业计量仪器校准。",
+    "如使用模拟来源：模拟数据，非真实设备测量，不能作为真实测量证据；本数据集来源见概况。",
+)
+
+
+def validate_title(title):
+    if (not isinstance(title, str) or not title.strip() or len(title) > 120
+            or any(ord(c) < 32 for c in title)):
+        raise DataError("报告标题必须为 1～120 个字符，不能包含控制字符。")
+    return title.strip()
+
+
+@dataclass(frozen=True)
+class ReportSnapshot:
+    report_id: str
+    product_name: str
+    version: str
+    title: str
+    created_at: datetime
+    analysis: DatasetAnalysis
+    power_factors: np.ndarray
+    thresholds: Thresholds | None
+    detection: DetectionResult | None
+
+    @property
+    def source_label(self):
+        return "模拟数据，非真实设备测量" if self.analysis.simulated else self.analysis.source
+
+    @property
+    def time_start(self):
+        return np.min(self.analysis.times)
+
+    @property
+    def time_end(self):
+        return np.max(self.analysis.times)
+
+    @property
+    def detection_status(self):
+        if self.detection is None:
+            return NOT_DETECTED
+        return NO_EVENTS if not self.detection.events else "已执行用户阈值检测。"
+
+
+def statistics_rows(snapshot):
+    """One presentation mapping shared by PDF and XLSX; no new calculation."""
+    a = snapshot.analysis
+    rows = []
+    for stats in (a.voltage, a.current, a.power.active_statistics, a.power.apparent_statistics,
+                  a.power.reactive_abs_statistics, a.power.power_factor_statistics):
+        for name, value in (("算术平均值", stats.mean), ("最大值", stats.maximum), ("最小值", stats.minimum)):
+            rows.append((stats.quantity, name, value, stats.unit))
+        if stats in (a.voltage, a.current, a.power.power_factor_statistics):
+            rows.append((stats.quantity, "总体标准差（ddof=0）", stats.population_std, stats.unit))
+    return rows
+
+===== 来源文件：smartpower/reporting/pdf_exporter.py；原始行数：152；SHA256：cda0273c789bab770159423738c656be4c15d9633907213e2945a803cc8707cb =====
+"""Paginated offline Chinese technical PDF, with vector time charts."""
+
+from xml.sax.saxutils import escape
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.platypus import Flowable, LongTable, PageBreak, Paragraph, SimpleDocTemplate, Spacer, TableStyle
+
+from smartpower.analysis.power import POWER_MODEL
+from smartpower.anomaly.models import DISCLAIMER
+from smartpower.reporting.chart_renderer import render_chart
+from smartpower.reporting.files import atomic_report
+from smartpower.reporting.fonts import FONT_LOCK, ensure_glyphs, report_font
+from smartpower.reporting.models import LIMITATIONS, statistics_rows
+
+
+class DeferredEventTable(Flowable):
+    """Materialize at most one bounded event batch when Platypus reaches it."""
+    BATCH_SIZE = 256
+
+    def __init__(self, events, start, stop, make_table):
+        super().__init__()
+        self.events, self.start, self.stop = events, start, stop
+        self.make_table = make_table
+        self._table = None
+
+    def rows(self):
+        yield ("原始索引", "采样时间", "异常类型", "采样值", "用户阈值", "单位")
+        for index in range(self.start, self.stop):
+            e = self.events[index]
+            yield (e.row_index, str(e.timestamp).replace("T", " "), e.kind,
+                   f"{e.value:.12g}", f"{e.threshold:.12g}", e.unit)
+
+    def _materialize(self):
+        if self._table is None:
+            self._table = self.make_table(list(self.rows()), [48, 151, 72, 82, 82, 60])
+        return self._table
+
+    def wrap(self, width, height):
+        return self._materialize().wrapOn(self.canv, width, height)
+
+    def split(self, width, height):
+        return self._materialize().splitOn(self.canv, width, height)
+
+    def draw(self):
+        self._materialize().drawOn(self.canv, 0, 0)
+
+
+def export_pdf(snapshot, path, *, overwrite=False, font_path=""):
+    with FONT_LOCK:
+        font = report_font(font_path)
+        body = ParagraphStyle("正文", fontName=font, fontSize=10, leading=17, spaceAfter=9, wordWrap="CJK")
+        heading = ParagraphStyle("章节", parent=body, fontSize=17, leading=25, textColor=colors.HexColor("#183153"), spaceAfter=18)
+        small = ParagraphStyle("表格", parent=body, fontSize=8, leading=12, spaceAfter=0)
+
+        def paragraph(value, style=body):
+            return Paragraph(escape(str(value)), style)
+
+        def table(rows, widths):
+            result = LongTable([[paragraph(v, small) for v in row] for row in rows], colWidths=widths,
+                               repeatRows=1, hAlign="LEFT", splitByRow=1, splitInRow=1)
+            result.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e9f0fa")),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7f9fc")]),
+                ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#d3ddea")),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 7),
+                ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ]))
+            return result
+
+        a = snapshot.analysis
+        story = [Spacer(1, 65), paragraph(snapshot.product_name, heading), Spacer(1, 25),
+                 paragraph(snapshot.title, ParagraphStyle("封面", parent=heading, fontSize=25, leading=36)),
+                 Spacer(1, 35), table([
+                     ("报告信息", "内容"), ("数据集", a.dataset_name), ("来源", snapshot.source_label),
+                     ("生成时间", snapshot.created_at.isoformat(timespec="seconds")),
+                     ("开发版本", "V" + snapshot.version), ("报告唯一标识", snapshot.report_id),
+                 ], [110, 385]), Spacer(1, 28), paragraph("离线生成 · 单相交流运行数据分析"),
+                 paragraph(DISCLAIMER), PageBreak(), paragraph("一、数据概况", heading), table([
+                     ("项目", "内容"), ("数据集 ID", a.dataset_id), ("数据集名称", a.dataset_name),
+                     ("数据来源", snapshot.source_label), ("是否模拟", "是" if a.simulated else "否，文件来源未核验"),
+                     ("采样数量", f"{a.count} 条"), ("起始时间", snapshot.time_start), ("结束时间", snapshot.time_end),
+                     ("字段与单位", "时间：本地无时区；电压有效值 V；电流有效值 A；功率因数：无量纲，0～1。"),
+                 ], [110, 385]), Spacer(1, 16), paragraph(POWER_MODEL),
+                 paragraph("时间范围取完整数据的最早/最晚时间，原始记录顺序不改变。"), PageBreak()]
+        rows = statistics_rows(snapshot)
+        for mode, title, quantities in (
+            ("voltage", "二、电压分析", {a.voltage.quantity}),
+            ("current", "三、电流分析", {a.current.quantity}),
+            ("power", "四、功率及功率因数分析", {a.power.active_statistics.quantity, a.power.apparent_statistics.quantity,
+                                                    a.power.reactive_abs_statistics.quantity, a.power.power_factor_statistics.quantity}),
+        ):
+            story += [paragraph(title, heading), table([("参数", "统计指标", "数值", "单位")] +
+                      [(q, label, f"{value:.12g}", unit) for q, label, value, unit in rows if q in quantities],
+                      [150, 135, 140, 70]), Spacer(1, 18), render_chart(snapshot, mode, font),
+                      paragraph("绘图可减少显示点数；本报告统计及异常明细均基于完整数据。"), PageBreak()]
+        story += [paragraph("五、异常检测结果", heading),
+                  paragraph("检测启用状态：已启用。" if snapshot.thresholds is not None else "检测启用状态：未启用。"),
+                  paragraph(snapshot.detection_status),
+                  paragraph("阈值是用户配置条件，不是国家标准限值；等于阈值不计异常。")]
+        if snapshot.detection is not None:
+            d, t = snapshot.detection, snapshot.thresholds
+            story.append(paragraph(f"检测已启用且已执行：电压下限 {t.voltage_lower:g} V，电压上限 {t.voltage_upper:g} V，电流上限 {t.current_upper:g} A。"))
+            story.append(table([("统计项目", "次数 / 数量"), ("异常事件总数", len(d.events)),
+                                ("唯一异常采样点", d.unique_sample_count), *d.type_counts.items()], [250, 245]))
+            if d.events:
+                story += [Spacer(1, 15), paragraph("全部异常明细（原始索引从 0 起）")]
+                for start in range(0, len(d.events), DeferredEventTable.BATCH_SIZE):
+                    story.append(DeferredEventTable(d.events, start,
+                                 min(start + DeferredEventTable.BATCH_SIZE, len(d.events)), table))
+        story += [PageBreak(), paragraph("六、说明与限制", heading)]
+        story.extend(paragraph(f"{j + 1}. {text}") for j, text in enumerate(LIMITATIONS))
+        story.append(paragraph("中文字体：" + ("用户配置的嵌入式 TrueType 字体。" if font_path else
+                    "标准 PDF 中文字体 STSong-Light 引用（未嵌入字体文件），阅读器需支持中文字体/亚洲语言字体包；离线跨机分发建议在系统设置配置有嵌入许可的中文 TrueType 字体。")))
+
+        def texts(item):
+            if isinstance(item, Paragraph):
+                yield item.getPlainText()
+            elif isinstance(item, DeferredEventTable):
+                for row in item.rows():
+                    yield from (str(value) for value in row)
+            elif isinstance(item, LongTable):
+                for row in item._cellvalues:
+                    for cell in row:
+                        yield from texts(cell)
+            elif hasattr(item, "contents"):
+                for child in item.contents:
+                    yield from texts(child)
+            elif hasattr(item, "text"):
+                yield item.text
+
+        # Glyph coverage needs distinct characters, not a giant copy of all text.
+        characters = set("第页智电析运行数据分析")
+        for item in story:
+            for text in texts(item):
+                characters.update(text)
+        ensure_glyphs(font, "".join(characters))
+
+        def footer(canvas, document):
+            canvas.saveState()
+            canvas.setFont(font, 8)
+            canvas.setFillColor(colors.HexColor("#56677e"))
+            canvas.drawString(44, 818, f"智电析 · V{snapshot.version} · 运行数据分析")
+            canvas.drawString(44, 29, f"报告 {snapshot.report_id[:8]} · {snapshot.source_label}")
+            canvas.drawRightString(A4[0] - 44, 29, f"第 {document.page} 页")
+            canvas.restoreState()
+
+        with atomic_report(path, ".pdf", overwrite=overwrite) as temporary:
+            document = SimpleDocTemplate(str(temporary), pagesize=A4, rightMargin=44, leftMargin=44,
+                                         topMargin=50, bottomMargin=48, title=snapshot.title, author=snapshot.product_name)
+            document.build(story, onFirstPage=footer, onLaterPages=footer)
+
+===== 来源文件：smartpower/reporting/service.py；原始行数：39；SHA256：e2b62eb1c857a6f89e401c4d04be2f1dda73dab8d5fcc8f7190ffcbf84cbeb99 =====
+"""Load exactly once, reuse V0.3/V0.4, and freeze buffers before rendering."""
+
+from dataclasses import replace
+from datetime import datetime, timezone
+from uuid import uuid4
+
+import numpy as np
+
+from smartpower.analysis.service import analyze_dataset
+from smartpower.anomaly.detector import detect_anomalies
+from smartpower.config import APP_NAME, APP_VERSION
+from smartpower.data.importer import Dataset
+from smartpower.data.validation import validate_frame
+from smartpower.data.validation import DataError
+from smartpower.reporting.models import DEFAULT_TITLE, ReportSnapshot, validate_title
+
+
+def frozen_array(values):
+    values = np.asarray(values)
+    # bytes-backed buffers cannot be made writable again by setflags.
+    return np.frombuffer(values.tobytes(), dtype=values.dtype).reshape(values.shape)
+
+
+def build_report_snapshot(repository, dataset_id, *, title=DEFAULT_TITLE, thresholds=None):
+    title = validate_title(title)
+    loaded = repository.load(dataset_id)
+    if not isinstance(loaded.name, str) or any(ord(c) < 32 for c in loaded.name):
+        raise DataError("数据集名称包含控制字符或类型无效，无法生成报告；请先更正名称。")
+    dataset = Dataset(loaded.name, validate_frame(loaded.frame), loaded.simulated)
+    analysis = analyze_dataset(dataset, "all", dataset_id)
+    sample = analysis.samples
+    sample = replace(sample, order=frozen_array(sample.order), seconds=frozen_array(sample.seconds),
+                     voltage=frozen_array(sample.voltage), current=frozen_array(sample.current))
+    power = replace(analysis.power, active=frozen_array(analysis.power.active),
+                    apparent=frozen_array(analysis.power.apparent), reactive_abs=frozen_array(analysis.power.reactive_abs))
+    analysis = replace(analysis, times=frozen_array(analysis.times), samples=sample, power=power)
+    detection = detect_anomalies(dataset, thresholds, dataset_id) if thresholds is not None else None
+    return ReportSnapshot(str(uuid4()), APP_NAME, APP_VERSION, title, datetime.now(timezone.utc), analysis,
+                          frozen_array(dataset.frame["功率因数"].to_numpy()), thresholds, detection)
+
+===== 来源文件：smartpower/resources.py；原始行数：10；SHA256：7d976e779f697162436a819cc2f37f39c8b120c12177a282e9e332ad266de122 =====
+"""Project-owned runtime resources; never use the process working directory."""
+from pathlib import Path
+
+
+def resource_path(name):
+    base = Path(__file__).resolve().parent / 'assets'
+    path = (base / name).resolve()
+    if not path.is_relative_to(base.resolve()):
+        raise ValueError('资源路径必须位于应用资源目录。')
+    return path
+
+===== 来源文件：smartpower/settings/__init__.py；原始行数：1；SHA256：8980ec7ea9ada029af8fe9f054082ce8ad0c7e350bfb405bc4f15f22206204f3 =====
+"""User preferences, separate from samples and report algorithms."""
+
+===== 来源文件：smartpower/settings/manager.py；原始行数：56；SHA256：597a0883531e396f59d0980fbcb59494d88830317afb418f886d49d8f22d8a53 =====
+"""Versioned JSON in per-user config storage, never in the source tree."""
+
+from dataclasses import asdict, dataclass
+import json
+import os
+from pathlib import Path
+import tempfile
+
+from smartpower.data.validation import DataError
+from smartpower.settings.models import AppSettings
+
+
+@dataclass(frozen=True)
+class LoadedSettings:
+    value: AppSettings
+    warning: str = ""
+
+
+class SettingsManager:
+    def __init__(self, path, default_directory):
+        self.path = Path(path)
+        self.defaults = AppSettings(str(Path(default_directory).resolve()), str(Path(default_directory).resolve()))
+
+    def load(self):
+        try:
+            if not self.path.exists():
+                return LoadedSettings(self.defaults)
+            if self.path.stat().st_size > 65536:
+                raise ValueError("设置文件异常过大")
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+            if data.get("version") != 1 or not isinstance(data.get("settings"), dict):
+                raise ValueError("设置版本或结构不受支持")
+            return LoadedSettings(AppSettings(**data["settings"]).validate())
+        except (OSError, ValueError, TypeError, AttributeError) as exc:
+            return LoadedSettings(self.defaults, f"设置无法读取或已失效，暂用默认值：{exc}。原文件保留，点击保存才会替换。")
+
+    def save(self, settings):
+        settings.validate()
+        temporary = None
+        try:
+            # Explicit Save/confirmed Restore authorizes this dedicated config
+            # location. Export directories themselves are never created.
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=self.path.parent,
+                                             suffix=".json", delete=False) as stream:
+                temporary = Path(stream.name)
+                json.dump({"version": 1, "settings": asdict(settings)}, stream, ensure_ascii=False, indent=2)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, self.path)
+            temporary = None
+        except (OSError, ValueError, TypeError) as exc:
+            raise DataError(f"设置保存失败：{exc}。旧设置文件保留。") from exc
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+
+===== 来源文件：smartpower/settings/models.py；原始行数：29；SHA256：1a00a6163a3d7a081f90f1d9d85da13c9dc15e19bfb30821bbb1ffa54a6bfed2 =====
+from dataclasses import dataclass
+from pathlib import Path
+
+from smartpower.data.validation import DataError
+from smartpower.reporting.models import DEFAULT_TITLE, validate_title
+
+PAGE_KEYS = ("home", "data", "voltage", "current", "power", "anomalies", "reports", "settings")
+
+
+@dataclass(frozen=True)
+class AppSettings:
+    report_directory: str
+    chart_directory: str
+    report_title: str = DEFAULT_TITLE
+    startup_page: str = "home"
+    font_path: str = ""
+
+    def validate(self):
+        for name, value in (("默认报告目录", self.report_directory), ("默认图表目录", self.chart_directory)):
+            if not isinstance(value, str) or not Path(value).is_absolute() or not Path(value).is_dir():
+                raise DataError(f"{name}不存在或不是有效绝对目录，请选择已有目录；未自动创建目录。")
+        validate_title(self.report_title)
+        if self.startup_page not in PAGE_KEYS:
+            raise DataError("启动页面设置无效。")
+        if not isinstance(self.font_path, str):
+            raise DataError("中文字体路径必须为文本。")
+        if self.font_path and (not Path(self.font_path).is_file() or Path(self.font_path).suffix.lower() not in (".ttf", ".ttc")):
+            raise DataError("中文字体文件不存在，请选择合法可嵌入的 .ttf/.ttc 字体，或清空以使用标准中文引用。")
+        return self
+
+===== 来源文件：smartpower/storage/__init__.py；原始行数：1；SHA256：957a5f22c47763ab58567ba0c2c4c2d869e68dce7dbca906c0ee7a48989dd205 =====
+"""Persistence boundary for future dataset repositories."""
+
+===== 来源文件：smartpower/storage/database.py；原始行数：25；SHA256：f910a9a8a6a49aa9c6b3486e78f6e855a589aa5a96206993c05f2c76b7015f28 =====
+"""Explicit SQLite initialization, without fabricated electrical records."""
+
+import sqlite3
+from pathlib import Path
+
+
+def initialize_database(path: str | Path) -> None:
+    """Create only schema metadata when explicitly requested by a caller.
+
+    No database is created at application startup. Dataset tables and schema
+    migrations belong to subsequent data-management releases.
+    """
+    connection = sqlite3.connect(path)
+    try:
+        with connection:
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS app_metadata "
+                "(key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+            )
+            connection.execute(
+                "INSERT OR IGNORE INTO app_metadata (key, value) VALUES (?, ?)",
+                ("schema_version", "1"),
+            )
+    finally:
+        connection.close()
+
+===== 来源文件：smartpower/storage/repository.py；原始行数：108；SHA256：0383644d07033e653c3e968173287a13d80d42fa20ae0029e3653481f21c9f8b =====
+"""Transactional dataset repository. No Qt or GUI state in this module."""
+
+from contextlib import contextmanager
+from datetime import datetime
+from pathlib import Path
+import sqlite3
+
+import pandas as pd
+
+from smartpower.data.importer import Dataset
+from smartpower.data.validation import DataError, validate_frame
+
+
+class StorageError(DataError):
+    """Storage errors translated for the UI without hiding the original cause."""
+
+
+class DatasetRepository:
+    def __init__(self, path: str | Path):
+        self.path = Path(path)
+
+    @contextmanager
+    def _connection(self):
+        connection = None
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            connection = sqlite3.connect(self.path, timeout=5)
+            connection.execute("PRAGMA foreign_keys=ON")
+            with connection:
+                connection.execute("CREATE TABLE IF NOT EXISTS app_metadata "
+                                   "(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+                row = connection.execute("SELECT value FROM app_metadata WHERE key='schema_version'").fetchone()
+                if row and row[0] not in ("1", "2"):
+                    raise StorageError("数据库版本不受支持，请使用相应版本的软件，原数据未修改。")
+                connection.execute("""CREATE TABLE IF NOT EXISTS datasets (
+                    id INTEGER PRIMARY KEY, name TEXT NOT NULL CHECK(length(trim(name))>0),
+                    imported_at TEXT NOT NULL, simulated INTEGER NOT NULL CHECK(simulated IN (0,1)),
+                    row_count INTEGER NOT NULL CHECK(row_count>0))""")
+                connection.execute("""CREATE TABLE IF NOT EXISTS samples (
+                    dataset_id INTEGER NOT NULL REFERENCES datasets(id) ON DELETE CASCADE,
+                    position INTEGER NOT NULL, sampled_at TEXT NOT NULL,
+                    voltage REAL NOT NULL CHECK(voltage>=0), current REAL NOT NULL CHECK(current>=0),
+                    power_factor REAL NOT NULL CHECK(power_factor>=0 AND power_factor<=1),
+                    PRIMARY KEY(dataset_id, position))""")
+                connection.execute("INSERT INTO app_metadata VALUES ('schema_version','2') "
+                                   "ON CONFLICT(key) DO UPDATE SET value='2'")
+            yield connection
+        except StorageError:
+            raise
+        except (sqlite3.Error, OSError) as exc:
+            raise StorageError(f"数据库操作失败：{exc}。本次写入已回滚，当前预览仍可重新保存；请检查路径、权限或磁盘空间。") from exc
+        finally:
+            if connection is not None:
+                connection.close()
+
+    def save(self, dataset: Dataset, name: str) -> int:
+        name = name.strip()
+        if not name or len(name) > 200:
+            raise DataError("数据集名称不能为空，且不能超过 200 个字符。")
+        frame = validate_frame(dataset.frame)
+        with self._connection() as connection:
+            with connection:
+                cursor = connection.execute(
+                    "INSERT INTO datasets(name,imported_at,simulated,row_count) VALUES (?,?,?,?)",
+                    (name, datetime.now().astimezone().isoformat(timespec="seconds"),
+                     int(dataset.simulated), len(frame)),
+                )
+                dataset_id = cursor.lastrowid
+                connection.executemany(
+                    "INSERT INTO samples VALUES (?,?,?,?,?,?)",
+                    ((dataset_id, pos, time.isoformat(), float(voltage), float(current), float(pf))
+                     for pos, (time, voltage, current, pf) in
+                     enumerate(frame.itertuples(index=False, name=None))),
+                )
+        return int(dataset_id)
+
+    def list_datasets(self) -> list[dict]:
+        with self._connection() as connection:
+            connection.row_factory = sqlite3.Row
+            return [dict(row) for row in connection.execute(
+                "SELECT * FROM datasets ORDER BY id DESC")]
+
+    def load(self, dataset_id: int) -> Dataset:
+        with self._connection() as connection:
+            with connection:
+                connection.execute("BEGIN")
+                row = connection.execute("SELECT name,simulated,row_count FROM datasets WHERE id=?",
+                                         (dataset_id,)).fetchone()
+                if row is None:
+                    raise StorageError("指定数据集不存在，可能已被删除，请刷新历史列表。")
+                records = connection.execute(
+                    "SELECT sampled_at,voltage,current,power_factor FROM samples "
+                    "WHERE dataset_id=? ORDER BY position", (dataset_id,)).fetchall()
+                if len(records) != row[2]:
+                    raise StorageError("数据集记录数与元数据不一致，已停止读取，请保留数据库并检查。")
+        try:
+            frame = validate_frame(pd.DataFrame(records, columns=["时间", "电压", "电流", "功率因数"]))
+        except DataError as exc:
+            raise StorageError(f"历史数据校验失败：{exc}") from exc
+        return Dataset(row[0], frame, bool(row[1]))
+
+    def delete(self, dataset_id: int) -> None:
+        """Caller must obtain user confirmation before invoking this method."""
+        with self._connection() as connection:
+            with connection:
+                cursor = connection.execute("DELETE FROM datasets WHERE id=?", (dataset_id,))
+                if cursor.rowcount != 1:
+                    raise StorageError("数据集不存在或已删除，请刷新历史列表。")
+
+===== 来源文件：smartpower/ui/__init__.py；原始行数：1；SHA256：ce0dc478fa2c8ebbbddc604812984dce596378de1dd5d908a25e9b52783f61db =====
+"""Presentation layer."""
+
+===== 来源文件：smartpower/ui/anomaly_model.py；原始行数：36；SHA256：c0b7c28bf40f34e230e8c965d87a7ee78123e3f2df7ec8a78825b8f073019921 =====
+"""Lazy event table with cheap filtered row indices, without QTableWidget cells."""
+
+from PySide6.QtCore import QAbstractTableModel, Qt
+
+
+class AnomalyTableModel(QAbstractTableModel):
+    HEADERS = ("原始索引（从0起）", "时间", "异常类型", "参数", "采样数值", "用户阈值", "单位", "数据集标识", "数据来源")
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.result = None
+        self.indices = []
+
+    def set_result(self, result, kind="全部异常"):
+        self.beginResetModel()
+        self.result = result
+        self.indices = ([j for j, e in enumerate(result.events) if kind == "全部异常" or e.kind == kind]
+                        if result else [])
+        self.endResetModel()
+
+    def rowCount(self, parent=None):
+        return 0 if parent and parent.isValid() else len(self.indices)
+
+    def columnCount(self, parent=None):
+        return 0 if parent and parent.isValid() else len(self.HEADERS)
+
+    def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
+        if role == Qt.ItemDataRole.DisplayRole:
+            return self.HEADERS[section] if orientation == Qt.Orientation.Horizontal else section + 1
+
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+        if not index.isValid() or role != Qt.ItemDataRole.DisplayRole or self.result is None:
+            return None
+        e = self.result.events[self.indices[index.row()]]
+        return (str(e.row_index), str(e.timestamp).replace("T", " "), e.kind, e.parameter,
+                format(e.value, ".12g"), format(e.threshold, ".12g"), e.unit, str(e.dataset_id), e.source)[index.column()]
+
+===== 来源文件：smartpower/ui/main_window.py；原始行数：88；SHA256：d1a964d0e240b35fa26fd88ba3b8732ba060386c51cc927471d9b65542c71be0 =====
+"""Desktop shell with native window chrome and synchronized navigation."""
+
+from PySide6.QtWidgets import (
+    QButtonGroup, QFrame, QHBoxLayout, QMainWindow,
+    QPushButton, QStackedWidget, QVBoxLayout, QWidget,
+)
+
+from smartpower.config import APP_NAME, APP_VERSION
+from smartpower.ui.pages.home import HomePage
+from smartpower.ui.pages.registry import PAGE_SPECS
+from smartpower.ui.widgets import label
+from smartpower.ui.paths import default_settings_manager
+
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle(APP_NAME)
+        self.resize(1200, 800)
+        self.setMinimumSize(900, 620)
+        workspace = QWidget()
+        workspace.setObjectName("workspace")
+        layout = QHBoxLayout(workspace)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        sidebar = QFrame()
+        sidebar.setObjectName("sidebar")
+        sidebar.setFixedWidth(218)
+        navigation = QVBoxLayout(sidebar)
+        navigation.setContentsMargins(18, 28, 18, 20)
+        navigation.setSpacing(8)
+        navigation.addWidget(label("智电析", "brand"))
+        navigation.addWidget(label("电力系统运行数据分析", "muted"))
+        navigation.addSpacing(24)
+        self.navigation_group = QButtonGroup(self)
+        self.navigation_group.setExclusive(True)
+        self.navigation_buttons: dict[str, QPushButton] = {}
+        self.pages: dict[str, QWidget] = {}
+        self.stack = QStackedWidget()
+        self.stack.setObjectName("pageStack")
+        for index, spec in enumerate(PAGE_SPECS):
+            button = QPushButton(spec.title)
+            button.setObjectName("navButton")
+            button.setAccessibleName(spec.title)
+            button.setCheckable(True)
+            self.navigation_group.addButton(button, index)
+            self.navigation_buttons[spec.key] = button
+            navigation.addWidget(button)
+            page = spec.factory()
+            page.setObjectName(f"page_{spec.key}")
+            self.pages[spec.key] = page
+            self.stack.addWidget(page)
+            if isinstance(page, HomePage):
+                page.navigate_requested.connect(self.navigate)
+        for key in ("voltage", "current", "power"):
+            self.pages["anomalies"].detection_changed.connect(self.pages[key].receive_detection)
+        self.pages["settings"].settings_saved.connect(self.pages["reports"].apply_preferences)
+        navigation.addStretch()
+        navigation.addWidget(label(f"V{APP_VERSION} · 专业分析报告", "muted"))
+        layout.addWidget(sidebar)
+        layout.addWidget(self.stack, 1)
+        self.setCentralWidget(workspace)
+        self.navigation_group.idClicked.connect(self.stack.setCurrentIndex)
+        self.stack.currentChanged.connect(self._sync_navigation)
+        self._sync_navigation(0)
+        self.navigate(default_settings_manager().load().value.startup_page)
+
+    def navigate(self, key: str) -> None:
+        """Route by stable key; invalid routes must not silently select a page."""
+        if key not in self.pages:
+            raise KeyError(f"Unknown page: {key}")
+        self.stack.setCurrentWidget(self.pages[key])
+
+    def _sync_navigation(self, index: int) -> None:
+        self.navigation_group.button(index).setChecked(True)
+        self.statusBar().showMessage(f"当前页面：{PAGE_SPECS[index].title}  |  V{APP_VERSION}")
+
+    def closeEvent(self, event):
+        for key, page in self.pages.items():
+            if getattr(page, "busy", False):
+                page.notify("后台任务尚未完成，请等待结束后再关闭窗口。")
+                self.navigate(key)
+                event.ignore()
+                return
+        if not self.pages["data"].confirm_discard():
+            event.ignore()
+        else:
+            super().closeEvent(event)
+
+===== 来源文件：smartpower/ui/pages/__init__.py；原始行数：1；SHA256：63d59a4c16010d19ba0bb051202913da00b6048cf51e841f272e69c07425f862 =====
+"""Page components and navigation registry."""
+
+===== 来源文件：smartpower/ui/pages/analysis.py；原始行数：222；SHA256：6b5c039704861d88c8313fa858397b0deba405b4904859e227bebcb76594ecf4 =====
+"""Saved-dataset analysis with background I/O and explicit result provenance."""
+
+from PySide6.QtCore import QSignalBlocker, Signal
+from PySide6.QtGui import QTextOption
+from PySide6.QtWidgets import (
+    QAbstractItemView, QComboBox, QHeaderView, QHBoxLayout, QPlainTextEdit,
+    QProgressBar, QPushButton, QTableView, QTableWidget, QTableWidgetItem,
+)
+
+from smartpower.analysis.power import POWER_LIMITATION, POWER_MODEL
+from smartpower.analysis.service import analyze_saved_dataset
+from smartpower.storage.repository import DatasetRepository
+from smartpower.ui.pages.base import BasePage
+from smartpower.ui.paths import default_database_path
+from smartpower.ui.power_series_model import PowerSeriesModel
+from smartpower.ui.tasks import TaskThread
+from smartpower.ui.widgets import label
+from smartpower.visualization.plot_widget import TimePlotWidget
+
+
+class AnalysisPage(BasePage):
+    operation_finished = Signal()
+
+    def __init__(self, mode: str, parent=None, repository=None, with_chart=True):
+        titles = {"voltage": "电压分析", "current": "电流分析", "power": "功率分析"}
+        super().__init__(titles[mode], "选择 V0.2 已保存的数据集，点击“开始分析”读取并计算；可手动重新分析。", parent)
+        self.content.setContentsMargins(24, 20, 24, 20)
+        self.content.setSpacing(12)
+        self.mode = mode
+        self.repository = repository or DatasetRepository(default_database_path())
+        self.current_result = None
+        self._thread = None
+        self._callback = None
+        self._revision = 0
+        self._task_revision = 0
+        self._detection_snapshot = None
+        self.chart = TimePlotWidget(mode) if with_chart else None
+        self.dataset_combo = QComboBox()
+        self.dataset_combo.setPlaceholderText("请选择已保存的数据集")
+        self.dataset_combo.setMinimumContentsLength(10)
+        self.dataset_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.refresh_button = QPushButton("刷新数据集")
+        self.analyze_button = QPushButton("开始分析")
+        row = QHBoxLayout()
+        row.addWidget(self.dataset_combo, 1)
+        row.addWidget(self.refresh_button)
+        row.addWidget(self.analyze_button)
+        self.content.addLayout(row)
+        self.metadata = QPlainTextEdit()
+        self.metadata.setReadOnly(True)
+        self.metadata.setWordWrapMode(QTextOption.WrapMode.WrapAnywhere)
+        self.metadata.setFixedHeight(66)
+        self.metadata.setPlainText("尚无分析结果。先刷新数据集列表，再选择并开始分析。")
+        self.content.addWidget(self.metadata)
+        self.message = label("请先在数据管理中保存数据集，然后点击“刷新数据集”。", "muted")
+        self.content.addWidget(self.message)
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 0)
+        self.progress.hide()
+        self.content.addWidget(self.progress)
+        if self.chart is not None:
+            self.content.addWidget(self.chart)
+            self.chart.message.connect(self.notify)
+        self.summary = QTableWidget(0, 3)
+        self.summary.setHorizontalHeaderLabels(["统计指标", "计算结果", "单位"])
+        self.summary.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.summary.verticalHeader().hide()
+        self.summary.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.summary.setColumnWidth(1, 160)
+        self.summary.setColumnWidth(2, 80)
+        self.summary.setMinimumHeight(240)
+        self.content.addWidget(self.summary)
+        self.series_title = label("逐采样点功率计算结果", "sectionTitle")
+        self.series_title.hide()
+        self.content.addWidget(self.series_title)
+        self.series_model = PowerSeriesModel(self)
+        self.series_table = QTableView()
+        self.series_table.setModel(self.series_model)
+        self.series_table.setMinimumHeight(220)
+        for column, width in enumerate((200, 180, 180, 250)):
+            self.series_table.setColumnWidth(column, width)
+        self.series_table.hide()
+        self.content.addWidget(self.series_table)
+        if mode == "power":
+            note = POWER_MODEL + "\n" + POWER_LIMITATION + "\n功率因数平均值为采样点算术平均值，不是整个时间段的综合功率因数。"
+        elif mode == "current":
+            note = "全部电流为有效值，单位 A；最大值是采样有效值最大值，不是交流瞬时峰值。总体标准差使用 ddof=0。"
+        else:
+            note = "全部电压为有效值，单位 V；总体标准差使用 ddof=0。所有采样点等权统计，不作时间加权。"
+        if not with_chart:
+            pass
+        elif mode == "power":
+            self.content.insertWidget(2, label(note, "muted"))
+        else:
+            self.content.addWidget(label(note, "muted"))
+        self.refresh_button.clicked.connect(self.refresh_datasets)
+        self.analyze_button.clicked.connect(self.start_analysis)
+        self.dataset_combo.currentIndexChanged.connect(self._selection_changed)
+
+    @property
+    def busy(self):
+        return self._thread is not None
+
+    def notify(self, text):
+        self.message.setText(text)
+
+    def _clear_results(self):
+        self.current_result = None
+        if self.chart is not None:
+            self.chart.clear()
+        self.summary.setRowCount(0)
+        self.series_model.set_result(None)
+        self.series_title.hide()
+        self.series_table.hide()
+        self.metadata.setPlainText("尚无当前数据集的分析结果。")
+
+    def _selection_changed(self, *_):
+        self._revision += 1
+        self._clear_results()
+        self.notify("请选择数据集。" if self.dataset_combo.currentData() is None else "已选择数据集，请点击“开始分析”；旧结果已清除。")
+
+    def _start(self, operation, callback, message):
+        if self.busy:
+            return
+        self._task_revision = self._revision
+        self._callback = callback
+        self._thread = TaskThread(operation, self)
+        self._thread.finished.connect(self._finish)
+        for widget in (self.dataset_combo, self.refresh_button, self.analyze_button):
+            widget.setEnabled(False)
+        self.progress.show()
+        self.notify(message)
+        self._thread.start()
+
+    def _finish(self):
+        thread, callback = self._thread, self._callback
+        self._thread = self._callback = None
+        self.progress.hide()
+        try:
+            if self._task_revision != self._revision:
+                self._clear_results()
+                self.notify("数据集选择已变化，本次结果已丢弃，请重新分析。")
+            elif thread.error:
+                self._clear_results()
+                self.notify("分析或读取失败：" + thread.error)
+            else:
+                callback(thread.result)
+        except Exception as exc:
+            self._clear_results()
+            self.notify(f"结果展示失败：{exc}。请重新分析。")
+        finally:
+            for widget in (self.dataset_combo, self.refresh_button, self.analyze_button):
+                widget.setEnabled(True)
+            thread.deleteLater()
+            self.operation_finished.emit()
+
+    def refresh_datasets(self):
+        if self.busy:
+            return
+        self._revision += 1
+        self._clear_results()
+        self._start(self.repository.list_datasets, self._fill_datasets, "正在后台读取已保存的数据集…")
+
+    def _fill_datasets(self, rows):
+        with QSignalBlocker(self.dataset_combo):
+            self.dataset_combo.clear()
+            for row in rows:
+                source = "模拟数据" if row["simulated"] else "导入文件（来源未核验）"
+                self.dataset_combo.addItem(f"{row['name']} · {source}", row["id"])
+            self.dataset_combo.setCurrentIndex(-1)
+        self.notify(f"已读取 {len(rows)} 个数据集，请选择后开始分析。" if rows else "尚无已保存数据集，请先在数据管理中保存。")
+
+    def start_analysis(self):
+        if self.busy:
+            return
+        self._revision += 1
+        self._clear_results()
+        identifier = self.dataset_combo.currentData()
+        if identifier is None:
+            self.notify("请先选择已保存的数据集，再点击“开始分析”。")
+            return
+        self._start(lambda: analyze_saved_dataset(self.repository, identifier, self.mode),
+                    self._display_result, "正在后台读取数据并计算，旧结果已清除…")
+
+    def _display_result(self, result):
+        rows = [("采样记录数量", result.count, "条")]
+        if self.mode in ("voltage", "current"):
+            stats = result.voltage if self.mode == "voltage" else result.current
+            name = "电压有效值" if self.mode == "voltage" else "电流有效值"
+            rows.extend([(f"平均{name}", stats.mean, stats.unit),
+                         (f"{name}最大值", stats.maximum, stats.unit),
+                         (f"{name}最小值", stats.minimum, stats.unit),
+                         ("总体标准差（ddof=0）", stats.population_std, stats.unit)])
+        else:
+            power = result.power
+            for stats in (power.active_statistics, power.apparent_statistics, power.reactive_abs_statistics):
+                rows.extend([(stats.quantity + "算术平均值", stats.mean, stats.unit),
+                             (stats.quantity + "最大值", stats.maximum, stats.unit),
+                             (stats.quantity + "最小值", stats.minimum, stats.unit)])
+            pf = power.power_factor_statistics
+            rows.extend([("功率因数算术平均值（采样点）", pf.mean, pf.unit),
+                         ("功率因数最大值", pf.maximum, pf.unit),
+                         ("功率因数最小值", pf.minimum, pf.unit),
+                         ("功率因数总体标准差", pf.population_std, pf.unit)])
+            self.series_model.set_result(result)
+            self.series_title.show()
+            self.series_table.show()
+        self.summary.setRowCount(len(rows))
+        for row, (name, value, unit) in enumerate(rows):
+            for column, text in enumerate((name, format(value, ".12g"), unit)):
+                self.summary.setItem(row, column, QTableWidgetItem(text))
+        self.current_result = result
+        if self.chart is not None:
+            self.chart.set_result(result)
+            self.chart.set_detection(self._detection_snapshot)
+        self.metadata.setPlainText(f"数据集：{result.dataset_name}\n采样记录：{result.count} 条 · 来源：{result.source}")
+        self.notify("分析完成。结果基于当前已保存数据集；可再次点击“开始分析”重新读取和计算。")
+
+    def receive_detection(self, detection):
+        self._detection_snapshot = detection
+        if self.chart is not None:
+            self.chart.set_detection(detection)
+
+===== 来源文件：smartpower/ui/pages/anomaly.py；原始行数：109；SHA256：910de64aa09b20f7d2ff6700eeffeb22ecf2800a2dcee7a7e8235917c1d5313e =====
+"""Threshold detection page reusing saved-dataset selection and task lifecycle."""
+
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import QCheckBox, QComboBox, QFormLayout, QLineEdit, QPushButton, QTableView
+
+from smartpower.anomaly.models import DISCLAIMER, KINDS, Thresholds
+from smartpower.anomaly.service import detect_saved_dataset
+from smartpower.data.validation import DataError
+from smartpower.ui.anomaly_model import AnomalyTableModel
+from smartpower.ui.pages.analysis import AnalysisPage
+from smartpower.ui.widgets import label
+
+
+class AnomalyPage(AnalysisPage):
+    detection_changed = Signal(object)
+
+    def __init__(self, parent=None, repository=None):
+        super().__init__("voltage", parent, repository, with_chart=False)
+        self.title_label.setText("异常检测")
+        self.content.itemAt(1).widget().setText("选择已保存数据集，填写并明确启用用户阈值后开始检测；结果可关联电压、电流曲线。")
+        self.analyze_button.setText("开始检测")
+        self.summary.hide()
+        self.enabled_check = QCheckBox("我已确认阈值，仅按当前配置启用检测")
+        self.content.insertWidget(2, self.enabled_check)
+        form = QFormLayout()
+        self.voltage_lower = QLineEdit()
+        self.voltage_upper = QLineEdit()
+        self.current_upper = QLineEdit()
+        self.threshold_inputs = (self.voltage_lower, self.voltage_upper, self.current_upper)
+        for title, edit in zip(("电压下限（V）", "电压上限（V）", "电流上限（A）"), self.threshold_inputs):
+            edit.setPlaceholderText("请输入有限非负数值")
+            form.addRow(title, edit)
+        self.content.insertLayout(3, form)
+        self.preset_button = QPushButton("填入演示阈值（非标准：210 V / 230 V / 20 A）")
+        self.content.insertWidget(4, self.preset_button)
+        self.content.insertWidget(5, label("电压 < 下限或 > 上限、电流 > 上限才计异常；等于阈值不计。演示阈值不是国家标准或设备合格判据。", "muted"))
+        self.counts = label("尚无当前阈值的检测结果。", "sectionTitle")
+        self.content.addWidget(self.counts)
+        self.type_filter = QComboBox()
+        self.type_filter.addItems(["全部异常", *KINDS])
+        self.content.addWidget(self.type_filter)
+        self.event_model = AnomalyTableModel(self)
+        self.event_table = QTableView()
+        self.event_table.setModel(self.event_model)
+        self.event_table.setMinimumHeight(300)
+        for col, width in enumerate((140, 220, 120, 80, 120, 120, 60, 100, 230)):
+            self.event_table.setColumnWidth(col, width)
+        self.content.addWidget(self.event_table)
+        self.content.addWidget(label(DISCLAIMER, "muted"))
+        self.preset_button.clicked.connect(self.apply_demo_preset)
+        for edit in self.threshold_inputs:
+            edit.textChanged.connect(self._threshold_changed)
+        self.enabled_check.toggled.connect(self._threshold_changed)
+        self.type_filter.currentTextChanged.connect(self._filter_events)
+
+    def apply_demo_preset(self):
+        for edit, value in zip(self.threshold_inputs, ("210", "230", "20")):
+            edit.setText(value)
+        self.notify("已填入演示阈值，尚需明确勾选启用并点击“开始检测”；这不是设备合格判据。")
+
+    def _clear_results(self):
+        super()._clear_results()
+        if hasattr(self, "event_model"):
+            self.event_model.set_result(None)
+            self.counts.setText("尚无当前阈值的检测结果。")
+        self.detection_changed.emit(None)
+
+    def _threshold_changed(self, *_):
+        self._revision += 1
+        self._clear_results()
+        self.notify("阈值或启用状态已变化，旧检测及曲线标记已清除；请重新开始检测。")
+
+    def start_analysis(self):
+        if self.busy:
+            return
+        self._revision += 1
+        self._clear_results()
+        identifier = self.dataset_combo.currentData()
+        if identifier is None:
+            self.notify("请先选择已保存的数据集，再开始检测。")
+            return
+        if not self.enabled_check.isChecked():
+            self.notify("请填写阈值并明确勾选启用阈值检测。")
+            return
+        try:
+            try:
+                values = [float(edit.text()) for edit in self.threshold_inputs]
+            except (ValueError, OverflowError) as exc:
+                raise DataError("阈值必须为有限非负数值，请检查输入。") from exc
+            thresholds = Thresholds(*values)
+        except DataError as exc:
+            self.notify(str(exc))
+            return
+        self._start(lambda: detect_saved_dataset(self.repository, identifier, thresholds),
+                    self._display_result, "正在后台读取完整数据并检测…")
+
+    def _display_result(self, result):
+        self.current_result = result
+        self.event_model.set_result(result, self.type_filter.currentText())
+        counts = result.type_counts
+        self.counts.setText(f"异常事件 {len(result.events)} 次 · 涉及唯一采样点 {result.unique_sample_count} 条\n"
+                            + " · ".join(f"{kind} {counts[kind]} 次" for kind in KINDS))
+        self.metadata.setPlainText(f"数据集：{result.dataset_name}\n完整采样：{result.count} 条 · 来源：{result.source}")
+        self.notify("检测完成；异常标记已关联相同数据快照的电压/电流曲线。" if result.events
+                    else "未检测到符合当前阈值条件的异常记录。")
+        self.detection_changed.emit(result)
+
+    def _filter_events(self, kind):
+        self.event_model.set_result(self.current_result, kind)
+
+===== 来源文件：smartpower/ui/pages/base.py；原始行数：19；SHA256：31b428d8eb22b734f07ef3be759480c2baa23afdabd7078c04e060153d288496 =====
+"""Scrollable page shell shared by all modules."""
+
+from PySide6.QtWidgets import QScrollArea, QVBoxLayout, QWidget
+
+from smartpower.ui.widgets import label
+
+
+class BasePage(QScrollArea):
+    def __init__(self, title: str, description: str, parent=None):
+        super().__init__(parent)
+        self.setWidgetResizable(True)
+        body = QWidget()
+        self.content = QVBoxLayout(body)
+        self.content.setContentsMargins(36, 32, 36, 32)
+        self.content.setSpacing(20)
+        self.title_label = label(title, "pageTitle")
+        self.content.addWidget(self.title_label)
+        self.content.addWidget(label(description, "muted"))
+        self.setWidget(body)
+
+===== 来源文件：smartpower/ui/pages/data_management.py；原始行数：344；SHA256：dc3122b47ab9fa4cbdd62f5f441d05f8c986bcc0539bcc770b770ff8a99ac15d =====
+"""Data-management UI orchestration. All expensive work runs in TaskThread."""
+
+from pathlib import Path
+
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QTextOption
+from PySide6.QtWidgets import (
+    QAbstractItemView, QComboBox, QFileDialog, QHBoxLayout, QLineEdit,
+    QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QTableView,
+)
+
+from smartpower.data.demo import export_demo, generate_demo
+from smartpower.data.importer import import_file
+from smartpower.data.query import query_rows
+from smartpower.data.validation import REQUIRED_COLUMNS
+from smartpower.storage.repository import DatasetRepository
+from smartpower.ui.pages.base import BasePage
+from smartpower.ui.paths import default_database_path
+from smartpower.ui.table_model import SampleTableModel
+from smartpower.ui.tasks import TaskThread
+from smartpower.ui.widgets import label
+
+
+class DataManagementPage(BasePage):
+    operation_finished = Signal()
+
+    def __init__(self, parent=None, repository=None):
+        super().__init__("数据管理", "导入并校验单相交流有效值数据，预览确认后保存到本地数据库。", parent)
+        self.content.setContentsMargins(24, 20, 24, 20)
+        self.content.setSpacing(10)
+        self.repository = repository or DatasetRepository(default_database_path())
+        self.dataset = None
+        self._dirty = False
+        self._dataset_id = None
+        self._thread = None
+        self._callback = None
+        self._sort_column = 0
+        self._ascending = True
+        self.import_button = QPushButton("导入 CSV / Excel")
+        self.demo_button = QPushButton("生成 1000 条模拟数据")
+        row = QHBoxLayout()
+        row.addWidget(self.import_button)
+        row.addWidget(self.demo_button)
+        row.addStretch()
+        self.content.addLayout(row)
+        self.content.addWidget(label("必需字段：时间、电压、电流、功率因数。单位：V、A；有效值非负，功率因数 0～1。", "muted"))
+
+        self.name_edit = QLineEdit()
+        self.name_edit.setMaxLength(200)
+        self.name_edit.setPlaceholderText("数据集名称（保存前可修改）")
+        self.save_button = QPushButton("保存数据集")
+        self.export_button = QPushButton("导出模拟 CSV")
+        row = QHBoxLayout()
+        for widget in (self.name_edit, self.save_button, self.export_button):
+            row.addWidget(widget)
+        self.content.addLayout(row)
+
+        self.history_combo = QComboBox()
+        self.history_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.history_combo.setMinimumContentsLength(8)
+        self.history_combo.setPlaceholderText("请选择历史数据集")
+        self.refresh_button = QPushButton("刷新历史")
+        self.load_button = QPushButton("读取")
+        self.delete_button = QPushButton("删除")
+        row = QHBoxLayout()
+        row.addWidget(self.history_combo, 1)
+        for widget in (self.refresh_button, self.load_button, self.delete_button):
+            row.addWidget(widget)
+        self.content.addLayout(row)
+
+        self.filter_column = QComboBox()
+        self.filter_column.addItems(["全部字段", *REQUIRED_COLUMNS])
+        self.filter_edit = QLineEdit()
+        self.filter_edit.setPlaceholderText("输入包含文本，点击筛选")
+        self.filter_button = QPushButton("筛选")
+        self.clear_button = QPushButton("清除")
+        row = QHBoxLayout()
+        for widget in (self.filter_column, self.filter_edit, self.filter_button, self.clear_button):
+            row.addWidget(widget)
+        self.content.addLayout(row)
+        self.source_label = label("尚无预览数据。导入和生成后均需手动保存。", "badge")
+        self.count_label = label("总记录数：0 · 当前显示：0", "muted")
+        self.content.addWidget(self.source_label)
+        self.content.addWidget(self.count_label)
+        self.model = SampleTableModel(self)
+        self.table = QTableView()
+        self.table.setModel(self.model)
+        self.table.setMinimumHeight(260)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setAlternatingRowColors(True)
+        self.table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.table.setSortingEnabled(True)
+        self.table.horizontalHeader().setStretchLastSection(False)
+        for index, width in enumerate((210, 130, 130, 130, 240)):
+            self.table.setColumnWidth(index, width)
+        self.table.horizontalHeader().setSortIndicator(0, Qt.SortOrder.AscendingOrder)
+        self.content.addWidget(self.table, 1)
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 0)
+        self.progress.setVisible(False)
+        self.content.addWidget(self.progress)
+        self.message = QPlainTextEdit()
+        self.message.setReadOnly(True)
+        self.message.setMaximumHeight(110)
+        self.message.setVisible(False)
+        self.content.insertWidget(2, self.message)
+        self.database_info = QPlainTextEdit()
+        self.database_info.setReadOnly(True)
+        self.database_info.setAccessibleName("本地数据库路径")
+        self.database_info.setWordWrapMode(QTextOption.WrapMode.WrapAnywhere)
+        self.database_info.setFixedHeight(60)
+        self.database_info.setPlainText(
+            f"本地数据库：{self.repository.path}\n点击“刷新历史”读取历史；导入不会自动保存。")
+        self.content.addWidget(self.database_info)
+        self._controls = (self.import_button, self.demo_button, self.save_button, self.export_button,
+                          self.refresh_button, self.load_button, self.delete_button, self.history_combo,
+                          self.name_edit, self.filter_column, self.filter_edit, self.filter_button, self.clear_button)
+        self.import_button.clicked.connect(self._choose_file)
+        self.demo_button.clicked.connect(self.generate)
+        self.save_button.clicked.connect(self.save)
+        self.export_button.clicked.connect(self._choose_export)
+        self.refresh_button.clicked.connect(self.refresh_history)
+        self.load_button.clicked.connect(self.load_selected)
+        self.delete_button.clicked.connect(self.delete_selected)
+        self.filter_button.clicked.connect(self.apply_filter)
+        self.filter_edit.returnPressed.connect(self.apply_filter)
+        self.clear_button.clicked.connect(self.clear_filter)
+        self.model.sort_requested.connect(self._sort)
+        self.history_combo.currentIndexChanged.connect(self._update_controls)
+        self._update_controls()
+
+    @property
+    def busy(self):
+        return self._thread is not None
+
+    @property
+    def has_unsaved_data(self):
+        return self._dirty
+
+    def notify(self, text):
+        self.message.setPlainText(text)
+        self.message.setFixedHeight(110 if text.count("\n") > 1 else 50)
+        self.message.setVisible(bool(text))
+
+    def _update_controls(self, *_):
+        for widget in self._controls:
+            widget.setEnabled(not self.busy)
+        available = self.dataset is not None and not self.busy
+        self.save_button.setEnabled(available and self._dirty)
+        self.export_button.setEnabled(available and self.dataset.simulated)
+        for widget in (self.filter_button, self.clear_button):
+            widget.setEnabled(available)
+        selected = self.history_combo.currentData() is not None and not self.busy
+        self.load_button.setEnabled(selected)
+        self.delete_button.setEnabled(selected)
+        self.table.horizontalHeader().setEnabled(not self.busy)
+
+    def _start(self, operation, callback, message):
+        if self.busy:
+            return
+        self.notify(message)
+        self._callback = callback
+        self._thread = TaskThread(operation, self)
+        self._thread.finished.connect(self._finish)
+        self.progress.setVisible(True)
+        self._update_controls()
+        self._thread.start()
+
+    def _finish(self):
+        thread, callback = self._thread, self._callback
+        self._thread = None
+        self._callback = None
+        self.progress.setVisible(False)
+        try:
+            if thread.error:
+                self.notify(thread.error + "\n当前预览及已有数据集保持不变。")
+                self.ensureWidgetVisible(self.message)
+            else:
+                callback(thread.result)
+        except Exception as exc:
+            self.notify(f"更新界面失败：{exc}，请刷新历史核实保存状态。")
+        finally:
+            thread.deleteLater()
+            self._update_controls()
+            self.operation_finished.emit()
+
+    def _confirm(self, title, text, action="确认"):
+        dialog = QMessageBox(self)
+        dialog.setWindowTitle(title)
+        dialog.setTextFormat(Qt.TextFormat.PlainText)
+        dialog.setText(text)
+        accept = dialog.addButton(action, QMessageBox.ButtonRole.AcceptRole)
+        cancel = dialog.addButton("取消", QMessageBox.ButtonRole.RejectRole)
+        dialog.setDefaultButton(cancel)
+        dialog.exec()
+        return dialog.clickedButton() is accept
+
+    def confirm_discard(self):
+        return not self._dirty or self._confirm("尚有未保存的预览", "当前预览尚未保存，继续将放弃此预览。", "放弃预览")
+
+    def _choose_file(self):
+        if self.busy:
+            return
+        path, _ = QFileDialog.getOpenFileName(self, "选择运行数据文件", "", "运行数据 (*.csv *.xlsx)")
+        if path:
+            self.import_path(path)
+
+    def import_path(self, path):
+        if self.busy or not self.confirm_discard():
+            return
+        self._start(lambda: self._prepare(import_file(path)), self._show_preview, "正在后台读取并校验文件…")
+
+    @staticmethod
+    def _prepare(dataset):
+        return dataset, query_rows(dataset)
+
+    def generate(self):
+        if self.busy or not self.confirm_discard():
+            return
+        self._start(lambda: self._prepare(generate_demo()), self._show_preview, "正在生成模拟数据，非真实设备测量…")
+
+    def _show_preview(self, result, saved=False):
+        self.dataset, rows = result
+        self._dirty = not saved
+        self._dataset_id = None
+        self.name_edit.setText(self.dataset.name)
+        self.filter_edit.clear()
+        self.filter_column.setCurrentIndex(0)
+        self._sort_column, self._ascending = 0, True
+        header = self.table.horizontalHeader()
+        header.blockSignals(True)
+        header.setSortIndicator(0, Qt.SortOrder.AscendingOrder)
+        header.blockSignals(False)
+        self.model.set_view(self.dataset, rows)
+        self.source_label.setText(self.dataset.source + (" · 已保存历史数据" if saved else " · 预览未保存"))
+        self._update_count()
+        self.notify(self.dataset.warning or "校验通过。请查看预览；保存将存储全部记录，不受筛选影响。")
+
+    def _update_count(self):
+        self.count_label.setText(f"总记录数：{len(self.dataset.frame)} · 当前显示：{self.model.rowCount()}")
+
+    def save(self):
+        if self.busy or self.dataset is None or not self._dirty:
+            return
+        name = self.name_edit.text().strip()
+        if not name:
+            self.notify("数据集名称不能为空。")
+            return
+        dataset = self.dataset
+        def operation():
+            identifier = self.repository.save(dataset, name)
+            return identifier
+        def saved(identifier):
+            self._dirty = False
+            self._dataset_id = identifier
+            self.source_label.setText(dataset.source + " · 已保存")
+            self.notify(f"数据集已保存，编号：{identifier}。点击“刷新历史”查看。")
+        self._start(operation, saved, "正在保存全部采样记录…")
+
+    def refresh_history(self):
+        self._start(self.repository.list_datasets, self._set_history, "正在读取历史数据集…")
+
+    def _set_history(self, rows):
+        self.history_combo.clear()
+        for item in rows:
+            source = "模拟数据" if item["simulated"] else "导入文件"
+            self.history_combo.addItem(
+                f"{item['name']} · {item['row_count']} 条 · {item['imported_at']} · {source}", item["id"])
+        if rows:
+            self.history_combo.setCurrentIndex(0)
+        self.notify(f"已读取 {len(rows)} 个历史数据集。")
+
+    def load_selected(self):
+        identifier = self.history_combo.currentData()
+        if self.busy or identifier is None or not self.confirm_discard():
+            return
+        def loaded(result):
+            self._show_preview(result, saved=True)
+            self._dataset_id = identifier
+        self._start(lambda: self._prepare(self.repository.load(identifier)), loaded, "正在后台读取历史采样记录…")
+
+    def delete_selected(self):
+        identifier = self.history_combo.currentData()
+        if self.busy or identifier is None:
+            return
+        if not self._confirm("删除数据集", f"确定删除以下数据集及全部采样记录？\n{self.history_combo.currentText()}\n删除后无法恢复。", "确认删除"):
+            return
+        def deleted(_):
+            self.history_combo.removeItem(self.history_combo.findData(identifier))
+            if self._dataset_id == identifier:
+                self._dataset_id = None
+                self._dirty = True
+                self.source_label.setText(self.dataset.source + " · 历史记录已删除，当前预览未保存")
+            self.notify("指定数据集已删除。当前表格为内存预览，未受影响。")
+        self._start(lambda: self.repository.delete(identifier), deleted, "正在删除指定数据集…")
+
+    def _choose_export(self):
+        if self.busy or self.dataset is None or not self.dataset.simulated:
+            return
+        dialog = QFileDialog(self, "导出模拟数据（非真实设备测量）")
+        dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
+        dialog.setNameFilter("CSV 文件 (*.csv)")
+        dialog.setDefaultSuffix("csv")
+        dialog.setOption(QFileDialog.Option.DontConfirmOverwrite, True)
+        dialog.selectFile("模拟数据.csv")
+        if dialog.exec():
+            self.export_to(dialog.selectedFiles()[0])
+
+    def export_to(self, path):
+        if self.busy or self.dataset is None:
+            return
+        dataset = self.dataset
+        try:
+            overwrite = Path(path).exists()
+        except OSError as exc:
+            self.notify(f"无法检查导出路径：{exc}。请检查路径与权限。")
+            return
+        if overwrite and not self._confirm("覆盖文件", "目标文件已存在，确认替换？", "确认覆盖"):
+            return
+        self._start(lambda: export_demo(dataset, path, overwrite=overwrite),
+                    lambda _: self.notify("模拟数据 CSV 已导出，文件内含模拟来源标记。"), "正在导出全部模拟数据…")
+
+    def _sort(self, column, ascending):
+        if self.busy:
+            return
+        self._sort_column, self._ascending = column, ascending
+        self.apply_filter()
+
+    def clear_filter(self):
+        self.filter_edit.clear()
+        self.apply_filter()
+
+    def apply_filter(self):
+        if self.busy or self.dataset is None:
+            return
+        dataset = self.dataset
+        text, column = self.filter_edit.text(), self.filter_column.currentText()
+        order, ascending = self._sort_column, self._ascending
+        def show(rows):
+            self.model.set_view(dataset, rows)
+            self._update_count()
+            self.notify("筛选与排序已完成，原始数据未修改。")
+        self._start(lambda: query_rows(dataset, text, column, order, ascending), show, "正在后台筛选与排序…")
+
+===== 来源文件：smartpower/ui/pages/features.py；原始行数：17；SHA256：f379ad30c13463697d48f3e471b232fafaec8bf88f359ee32d93c0864c4f4ee2 =====
+"""Honest empty states for modules scheduled after V0.1."""
+
+from smartpower.ui.pages.base import BasePage
+from smartpower.ui.widgets import card, label
+
+
+class FeaturePage(BasePage):
+    def __init__(self, title: str, description: str, planned: str, parent=None):
+        super().__init__(title, description, parent)
+        self.content.addWidget(label("待开发 · V0.1 仅提供页面框架", "badge"))
+        self.content.addWidget(card("后续功能规划", planned))
+        self.content.addWidget(card(
+            "当前状态",
+            "此模块尚未实现。当前未导入运行数据，也未执行电气计算或生成分析结果。"
+            "后续版本将基于用户导入的真实数据开展分析。",
+        ))
+        self.content.addStretch()
+
+===== 来源文件：smartpower/ui/pages/home.py；原始行数：33；SHA256：c48b62ed09867377e6052d5a63d8779b01e9c5bd53bd8e17fcbeebdd10581fb6 =====
+"""Home page with working shortcuts, without fabricated metrics."""
+
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import QHBoxLayout, QPushButton
+
+from smartpower.ui.pages.base import BasePage
+from smartpower.ui.widgets import card, label
+
+
+class HomePage(BasePage):
+    navigate_requested = Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__("首页", "欢迎使用智电析，集中管理电力系统运行数据与分析工作。", parent)
+        self.content.addWidget(label("V0.5 专业分析报告与系统设置", "badge"))
+        self.content.addWidget(card(
+            "从运行数据开始",
+            "前往数据管理导入 CSV / Excel 并保存。分析页提供统计和时间曲线；异常检测页支持用户阈值；分析报告页可离线生成 PDF / Excel，默认路径和标题可在系统设置中保存。",
+        ))
+        self.content.addWidget(card(
+            "数据来源清晰可见",
+            "文件导入仅表示来源未核验；模拟来源标记将保留到分析结果。功率计算仅适用于单相正弦稳态交流，数据统计不代表设备合格判定。",
+        ))
+        shortcuts = QHBoxLayout()
+        self.data_button = QPushButton("前往数据管理 →")
+        self.settings_button = QPushButton("查看系统设置 →")
+        self.data_button.clicked.connect(lambda: self.navigate_requested.emit("data"))
+        self.settings_button.clicked.connect(lambda: self.navigate_requested.emit("settings"))
+        shortcuts.addWidget(self.data_button)
+        shortcuts.addWidget(self.settings_button)
+        shortcuts.addStretch()
+        self.content.addLayout(shortcuts)
+        self.content.addStretch()
+
+===== 来源文件：smartpower/ui/pages/registry.py；原始行数：32；SHA256：0a4043af3618fc6efd69a5dff9312f1812584ae2952d0bf72bf788b1377cf694 =====
+"""Single source of truth for navigation order and page construction."""
+
+from dataclasses import dataclass
+from typing import Callable
+
+from PySide6.QtWidgets import QWidget
+
+from smartpower.ui.pages.analysis import AnalysisPage
+from smartpower.ui.pages.anomaly import AnomalyPage
+from smartpower.ui.pages.data_management import DataManagementPage
+from smartpower.ui.pages.home import HomePage
+from smartpower.ui.pages.settings import SettingsPage
+from smartpower.ui.pages.reports import ReportsPage
+
+
+@dataclass(frozen=True)
+class PageSpec:
+    key: str
+    title: str
+    factory: Callable[[], QWidget]
+
+
+PAGE_SPECS = (
+    PageSpec("home", "首页", HomePage),
+    PageSpec("data", "数据管理", DataManagementPage),
+    PageSpec("voltage", "电压分析", lambda: AnalysisPage("voltage")),
+    PageSpec("current", "电流分析", lambda: AnalysisPage("current")),
+    PageSpec("power", "功率分析", lambda: AnalysisPage("power")),
+    PageSpec("anomalies", "异常检测", AnomalyPage),
+    PageSpec("reports", "分析报告", ReportsPage),
+    PageSpec("settings", "系统设置", SettingsPage),
+)
+
+===== 来源文件：smartpower/ui/pages/reports.py；原始行数：220；SHA256：6b4a0d09461a3f7d4de2a29e15f7290b2047d3f272a1d6fa44dd7e8947aa800e =====
+"""Report centre: options captured before background snapshot and export."""
+
+from pathlib import Path
+
+from PySide6.QtCore import QSignalBlocker, Signal
+from PySide6.QtGui import QTextOption
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QFormLayout, QHBoxLayout, QLineEdit,
+                              QMessageBox, QPlainTextEdit, QProgressBar, QPushButton)
+
+from smartpower.anomaly.models import DISCLAIMER, Thresholds
+from smartpower.data.validation import DataError
+from smartpower.reporting.excel_exporter import export_excel
+from smartpower.reporting.models import validate_title
+from smartpower.reporting.pdf_exporter import export_pdf
+from smartpower.reporting.service import build_report_snapshot
+from smartpower.storage.repository import DatasetRepository
+from smartpower.ui.pages.base import BasePage
+from smartpower.ui.paths import default_database_path, default_settings_manager
+from smartpower.ui.tasks import TaskThread
+from smartpower.ui.widgets import label
+
+
+class ReportsPage(BasePage):
+    operation_finished = Signal()
+
+    def __init__(self, parent=None, repository=None, manager=None):
+        super().__init__("分析报告", "从本次读取的数据快照离线生成 PDF / Excel，完整统计和异常明细不随图表抽稀改变。", parent)
+        self.content.setContentsMargins(24, 20, 24, 20)
+        self.manager = manager or default_settings_manager()
+        self.repository = repository or DatasetRepository(default_database_path())
+        self.current_snapshot = None
+        self._thread = None
+        self._revision = 0
+        self._rows = {}
+        row = QHBoxLayout()
+        self.dataset_combo = QComboBox()
+        self.dataset_combo.setMinimumContentsLength(8)
+        self.dataset_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.dataset_combo.setPlaceholderText("请选择已保存数据集")
+        self.refresh_button = QPushButton("刷新数据集")
+        row.addWidget(self.dataset_combo, 1)
+        row.addWidget(self.refresh_button)
+        self.content.addLayout(row)
+        self.metadata = QPlainTextEdit()
+        self.metadata.setReadOnly(True)
+        self.metadata.setWordWrapMode(QTextOption.WrapMode.WrapAnywhere)
+        self.metadata.setFixedHeight(85)
+        self.content.addWidget(self.metadata)
+        form = QFormLayout()
+        self.report_title = QLineEdit()
+        form.addRow("报告标题", self.report_title)
+        self.detection_enabled = QCheckBox("在本次报告中执行用户阈值检测")
+        form.addRow(self.detection_enabled)
+        self.voltage_lower, self.voltage_upper, self.current_upper = (QLineEdit() for _ in range(3))
+        self.threshold_inputs = (self.voltage_lower, self.voltage_upper, self.current_upper)
+        for text, edit in zip(("电压下限（V）", "电压上限（V）", "电流上限（A）"), self.threshold_inputs):
+            edit.setPlaceholderText("启用检测时必填有限非负数值")
+            form.addRow(text, edit)
+        self.content.addLayout(form)
+        self.content.addWidget(label("不勾选时明确标注“本次未执行异常检测”，不会写成零异常。用户阈值不是国家标准限值，等于阈值不计异常。", "muted"))
+        self.content.addWidget(label("大量采样或密集异常会生成很长的完整报告，并占用较多时间与内存。导出期间请等待完成；当前不支持取消。需要逐条筛选时建议使用 Excel。", "muted"))
+        row = QHBoxLayout()
+        self.pdf_button, self.excel_button = QPushButton("生成 PDF 报告"), QPushButton("生成 Excel 报告")
+        row.addWidget(self.pdf_button)
+        row.addWidget(self.excel_button)
+        row.addStretch()
+        self.content.addLayout(row)
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 0)
+        self.progress.hide()
+        self.content.addWidget(self.progress)
+        self.message = label("请先刷新并选择已保存数据集。", "muted")
+        self.content.addWidget(self.message)
+        self.content.addWidget(label("任务开始后固定数据集、标题、阈值和字体配置；后台生成期间可继续使用导航。配置发生变化时仍按启动时快照导出，并明确提示文件对应的数据集。", "muted"))
+        self.content.addWidget(label(DISCLAIMER, "muted"))
+        self.preference_note = label("", "muted")
+        self.content.addWidget(self.preference_note)
+        self.refresh_button.clicked.connect(self.refresh_datasets)
+        self.dataset_combo.currentIndexChanged.connect(self._changed)
+        self.report_title.textChanged.connect(self._changed)
+        self.detection_enabled.toggled.connect(self._changed)
+        for edit in self.threshold_inputs:
+            edit.textChanged.connect(self._changed)
+        self.pdf_button.clicked.connect(lambda: self.start_export("pdf"))
+        self.excel_button.clicked.connect(lambda: self.start_export("xlsx"))
+        loaded = self.manager.load()
+        self.apply_preferences(loaded.value)
+        self._changed()
+        if loaded.warning:
+            self.notify(loaded.warning)
+
+    @property
+    def busy(self):
+        return self._thread is not None
+
+    def notify(self, text):
+        self.message.setText(text)
+
+    def apply_preferences(self, settings):
+        self._revision += 1
+        self.current_snapshot = None
+        if not self.busy:
+            self.report_title.setText(settings.report_title)
+        self.preference_note.setText(f"默认报告目录：{settings.report_directory}\nPDF 字体：{'用户配置 TrueType 字体' if settings.font_path else '标准 STSong-Light 引用；阅读器需支持中文，亦可在设置中配置嵌入字体'}")
+
+    def _changed(self, *_):
+        self._revision += 1
+        self.current_snapshot = None
+        row = self._rows.get(self.dataset_combo.currentData())
+        if row:
+            source = "模拟数据，非真实设备测量" if row["simulated"] else "导入文件（来源未核验）"
+            self.metadata.setPlainText(f"数据集：{row['name']}\n来源：{source}\n已保存记录：{row['row_count']} 条（导出时重新读取并校验）")
+        else:
+            self.metadata.setPlainText("尚未选择数据集，没有当前数据集的报告结果。")
+        if not self.busy:
+            self.notify("配置或数据集已变化，请选择格式生成报告。")
+
+    def _start(self, operation, task_kind):
+        self._task_kind = task_kind
+        self._task_revision = self._revision
+        self._thread = TaskThread(operation, self)
+        self._thread.finished.connect(self._finish)
+        self.progress.show()
+        self._set_enabled(False)
+        self._thread.start()
+
+    def _set_enabled(self, enabled):
+        for widget in (self.dataset_combo, self.refresh_button, self.pdf_button, self.excel_button,
+                       self.report_title, self.detection_enabled, *self.threshold_inputs):
+            widget.setEnabled(enabled)
+
+    def _finish(self):
+        thread = self._thread
+        self._thread = None
+        self.progress.hide()
+        self._set_enabled(True)
+        try:
+            if thread.error:
+                self.current_snapshot = None
+                self.notify("报告生成或读取失败：" + thread.error)
+            elif self._task_kind == "list":
+                with QSignalBlocker(self.dataset_combo):
+                    self.dataset_combo.clear()
+                    self._rows = {row["id"]: row for row in thread.result}
+                    for row in thread.result:
+                        self.dataset_combo.addItem(f"{row['name']} · {'模拟数据' if row['simulated'] else '来源未核验'}", row["id"])
+                    self.dataset_combo.setCurrentIndex(-1)
+                self._changed()
+                self.notify(f"已读取 {len(self._rows)} 个数据集，请选择。" if self._rows else "尚无已保存数据集，请先在数据管理中保存。")
+            else:
+                snapshot, path = thread.result
+                changed = self._revision != self._task_revision
+                self.current_snapshot = None if changed else snapshot
+                suffix = "当前选择或配置已变化，该文件仍对应启动时的快照。" if changed else "报告对应本次读取并校验的数据快照。"
+                self.notify(f"报告已保存：{path}\n数据集：{snapshot.analysis.dataset_name} · {snapshot.source_label}\n{suffix}")
+        except Exception as exc:
+            self.current_snapshot = None
+            self.notify(f"报告结果处理失败：{exc}")
+        finally:
+            thread.deleteLater()
+            self.operation_finished.emit()
+
+    def refresh_datasets(self):
+        if self.busy:
+            return
+        self.current_snapshot = None
+        self._revision += 1
+        self.notify("正在后台读取已保存数据集…")
+        self._start(self.repository.list_datasets, "list")
+
+    def start_export(self, kind):
+        if self.busy:
+            return
+        self.current_snapshot = None
+        identifier = self.dataset_combo.currentData()
+        if identifier is None:
+            self.notify("请先选择已保存的数据集，再生成报告。")
+            return
+        try:
+            title = validate_title(self.report_title.text())
+            thresholds = None
+            if self.detection_enabled.isChecked():
+                try:
+                    thresholds = Thresholds(*(float(edit.text()) for edit in self.threshold_inputs))
+                except (ValueError, OverflowError) as exc:
+                    raise DataError(f"异常检测阈值无效：{exc}。请填写有效阈值或取消检测。") from exc
+            loaded = self.manager.load()
+            if loaded.warning:
+                raise DataError(loaded.warning + "请先在系统设置确认并保存有效的目录、标题与字体配置，再生成报告。")
+            settings = loaded.value
+            revision = self._revision
+            path, _ = QFileDialog.getSaveFileName(self, "保存 PDF 报告" if kind == "pdf" else "保存 Excel 报告",
+                str(Path(settings.report_directory) / f"分析报告.{kind}"),
+                "PDF 报告 (*.pdf)" if kind == "pdf" else "Excel 报告 (*.xlsx)", options=QFileDialog.Option.DontConfirmOverwrite)
+            if not path:
+                return
+            if not Path(path).suffix:
+                path += f".{kind}"
+            if Path(path).suffix.lower() != f".{kind}":
+                raise DataError(f"文件必须使用 .{kind} 扩展名。")
+            overwrite = Path(path).exists()
+            if overwrite and QMessageBox.question(self, "确认覆盖", "报告已存在，是否覆盖？",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+                return
+            if revision != self._revision:
+                self.notify("选择或配置已变化，本次导出已取消，请重新生成。")
+                return
+            repository = self.repository
+            def generate():
+                snapshot = build_report_snapshot(repository, identifier, title=title, thresholds=thresholds)
+                if kind == "pdf":
+                    export_pdf(snapshot, path, overwrite=overwrite, font_path=settings.font_path)
+                else:
+                    export_excel(snapshot, path, overwrite=overwrite)
+                return snapshot, str(Path(path).resolve())
+            self.notify((loaded.warning + "\n" if loaded.warning else "") + "正在后台读取完整快照并生成报告…")
+            self._start(generate, kind)
+        except Exception as exc:
+            self.notify(f"无法生成报告：{exc}")
+
+===== 来源文件：smartpower/ui/pages/settings.py；原始行数：108；SHA256：b8c748d9dd93763917a6a67ffb6a53da4ee68165afffaf4e92191d8043639d16 =====
+"""Explicit user preferences; no dataset path changes."""
+
+import platform
+import sqlite3
+
+from PySide6.QtCore import Signal, qVersion
+from PySide6.QtGui import QTextOption
+from PySide6.QtWidgets import QComboBox, QFileDialog, QFormLayout, QHBoxLayout, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton
+
+from smartpower.config import APP_NAME, APP_VERSION
+from smartpower.settings.models import AppSettings, PAGE_KEYS
+from smartpower.ui.pages.base import BasePage
+from smartpower.ui.paths import default_settings_manager
+from smartpower.ui.widgets import card, label
+
+
+class SettingsPage(BasePage):
+    settings_saved = Signal(object)
+
+    def __init__(self, parent=None, manager=None):
+        super().__init__("系统设置", "设置报告和图表默认目录、标题及启动页面；数据存储路径规则保持不变。", parent)
+        self.manager = manager or default_settings_manager()
+        self.content.setContentsMargins(24, 20, 24, 20)
+        self.content.addWidget(card("软件信息", f"{APP_NAME}\n开发版本：V{APP_VERSION}\nPython {platform.python_version()} · Qt {qVersion()} · SQLite {sqlite3.sqlite_version}"))
+        form = QFormLayout()
+        self.report_directory, self.chart_directory, self.report_title, self.font_path = (QLineEdit() for _ in range(4))
+        self.startup_page = QComboBox()
+        for title, key in zip(("首页", "数据管理", "电压分析", "电流分析", "功率分析", "异常检测", "分析报告", "系统设置"), PAGE_KEYS):
+            self.startup_page.addItem(title, key)
+        for text, edit in (("默认报告目录", self.report_directory), ("默认图表目录", self.chart_directory)):
+            row = QHBoxLayout()
+            button = QPushButton("浏览…")
+            button.clicked.connect(lambda checked=False, field=edit: self.choose_directory(field))
+            row.addWidget(edit, 1)
+            row.addWidget(button)
+            form.addRow(text, row)
+        form.addRow("默认报告标题", self.report_title)
+        form.addRow("启动页面（重启生效）", self.startup_page)
+        font_row = QHBoxLayout()
+        font_button = QPushButton("选择字体…")
+        font_button.clicked.connect(self.choose_font)
+        font_row.addWidget(self.font_path, 1)
+        font_row.addWidget(font_button)
+        self.font_path.setPlaceholderText("留空：标准 PDF 中文字体 STSong-Light 引用")
+        form.addRow("PDF 中文字体", font_row)
+        self.content.addLayout(form)
+        self.content.addWidget(label("标准引用不分发字体文件，阅读器需支持中文/亚洲字体包。离线跨机阅读建议选择有合法嵌入许可、包含所需中文的 TrueType 字体；文件仅在本机使用，不上传。", "muted"))
+        buttons = QHBoxLayout()
+        self.save_button, self.restore_button = QPushButton("保存设置"), QPushButton("恢复默认设置")
+        buttons.addWidget(self.save_button)
+        buttons.addWidget(self.restore_button)
+        buttons.addStretch()
+        self.content.addLayout(buttons)
+        self.message = label("", "muted")
+        self.content.addWidget(self.message)
+        self.config_location = QPlainTextEdit()
+        self.config_location.setReadOnly(True)
+        self.config_location.setWordWrapMode(QTextOption.WrapMode.WrapAnywhere)
+        self.config_location.setFixedHeight(105)
+        self.config_location.setPlainText(f"设置文件：{self.manager.path}\n仅在保存或确认恢复时创建专用设置目录；不创建不存在的报告/图表目录，不修改数据库。")
+        self.content.addWidget(self.config_location)
+        self.save_button.clicked.connect(self.save_settings)
+        self.restore_button.clicked.connect(self.restore_defaults)
+        self.reload()
+
+    def fill(self, settings):
+        for edit, value in ((self.report_directory, settings.report_directory), (self.chart_directory, settings.chart_directory),
+                            (self.report_title, settings.report_title), (self.font_path, settings.font_path)):
+            edit.setText(value)
+        self.startup_page.setCurrentIndex(self.startup_page.findData(settings.startup_page))
+
+    def reload(self):
+        loaded = self.manager.load()
+        self.fill(loaded.value)
+        self.message.setText(loaded.warning or "设置已读取；更改后点击保存。")
+
+    def choose_directory(self, edit):
+        path = QFileDialog.getExistingDirectory(self, "选择已有目录", edit.text())
+        if path:
+            edit.setText(path)
+
+    def choose_font(self):
+        path, _ = QFileDialog.getOpenFileName(self, "选择具有合法嵌入许可的中文 TrueType 字体", self.font_path.text(), "TrueType 字体 (*.ttf *.ttc)")
+        if path:
+            self.font_path.setText(path)
+
+    def save_settings(self):
+        try:
+            settings = AppSettings(self.report_directory.text(), self.chart_directory.text(), self.report_title.text(),
+                                   self.startup_page.currentData(), self.font_path.text())
+            self.manager.save(settings)
+            self.settings_saved.emit(settings)
+            self.message.setText("设置已保存；默认导出路径立即使用，启动页面在重启后生效。")
+        except Exception as exc:
+            self.message.setText(f"设置保存失败：{exc}")
+
+    def restore_defaults(self):
+        if QMessageBox.question(self, "恢复默认设置", "确认恢复并保存默认设置？不会修改或删除数据集。",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self.manager.save(self.manager.defaults)
+            self.fill(self.manager.defaults)
+            self.settings_saved.emit(self.manager.defaults)
+            self.message.setText("默认设置已恢复并保存。")
+        except Exception as exc:
+            self.message.setText(f"恢复默认设置失败：{exc}")
+
+===== 来源文件：smartpower/ui/paths.py；原始行数：23；SHA256：7beaf8e525c9d312b84e3d818db1e90923bc9a0537ace76f5459f449dcb23a06 =====
+"""Shared Qt application-data location for all dataset consumers."""
+
+import os
+from pathlib import Path
+
+from PySide6.QtCore import QStandardPaths
+
+
+def default_database_path() -> Path:
+    override = os.environ.get("SMARTPOWER_DB_PATH")
+    if override:
+        return Path(override)
+    return Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation)) / "datasets.sqlite3"
+
+
+def default_settings_manager():
+    from smartpower.settings.manager import SettingsManager
+    override = os.environ.get("SMARTPOWER_SETTINGS_PATH")
+    path = Path(override) if override else Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation)) / "settings.json"
+    directory = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation))
+    if not directory.is_dir():
+        directory = Path.home()
+    return SettingsManager(path, directory)
+
+===== 来源文件：smartpower/ui/power_series_model.py；原始行数：44；SHA256：953b5b46f151b8078b48e00a0313419e8121978e694dbbf73631da578bb817f6 =====
+"""Lazy display of calculated power sequences, without per-row widgets."""
+
+import numpy as np
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
+
+
+class PowerSeriesModel(QAbstractTableModel):
+    HEADERS = ("时间", "有功功率 P（W）", "视在功率 S（VA）", "无功功率绝对值 |Q|（var）")
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.result = None
+
+    def set_result(self, result):
+        self.beginResetModel()
+        self.result = result
+        self.endResetModel()
+
+    def rowCount(self, parent=QModelIndex()):
+        return 0 if parent.isValid() or self.result is None else self.result.count
+
+    def columnCount(self, parent=QModelIndex()):
+        return 0 if parent.isValid() else 4
+
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+        if (not index.isValid() or self.result is None or
+                not 0 <= index.row() < self.result.count or not 0 <= index.column() < 4):
+            return None
+        if role == Qt.ItemDataRole.DisplayRole:
+            if index.column() == 0:
+                return np.datetime_as_string(self.result.times[index.row()], unit="ns").replace("T", " ").rstrip("0").rstrip(".")
+            series = (self.result.power.active, self.result.power.apparent, self.result.power.reactive_abs)
+            return format(float(series[index.column() - 1][index.row()]), ".12g")
+        if role == Qt.ItemDataRole.TextAlignmentRole and index.column() > 0:
+            return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        return None
+
+    def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
+        if role == Qt.ItemDataRole.DisplayRole:
+            if orientation == Qt.Orientation.Horizontal and 0 <= section < 4:
+                return self.HEADERS[section]
+            if orientation == Qt.Orientation.Vertical:
+                return str(section + 1)
+        return None
+
+===== 来源文件：smartpower/ui/table_model.py；原始行数：55；SHA256：1e8d87b908847cbc916dfd41cc82561e4f5698d3516c5baa3554e3610722951a =====
+"""Read-only lazy cell access; no per-cell widget allocation."""
+
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
+
+from smartpower.data.validation import REQUIRED_COLUMNS
+
+
+class SampleTableModel(QAbstractTableModel):
+    sort_requested = Signal(int, bool)
+    HEADERS = ("时间", "电压（V）", "电流（A）", "功率因数", "数据来源")
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.dataset = None
+        self.rows = ()
+        self._resetting = False
+
+    def set_view(self, dataset, rows):
+        self._resetting = True
+        self.beginResetModel()
+        self.dataset = dataset
+        self.rows = rows
+        self.endResetModel()
+        self._resetting = False
+
+    def rowCount(self, parent=QModelIndex()):
+        return 0 if parent.isValid() else len(self.rows)
+
+    def columnCount(self, parent=QModelIndex()):
+        return 0 if parent.isValid() else len(self.HEADERS)
+
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+        if (not index.isValid() or self.dataset is None or
+                not 0 <= index.row() < len(self.rows) or not 0 <= index.column() < 5):
+            return None
+        if role == Qt.ItemDataRole.DisplayRole:
+            if index.column() == len(REQUIRED_COLUMNS):
+                return self.dataset.source
+            value = self.dataset.frame.iat[int(self.rows[index.row()]), index.column()]
+            return str(value) if index.column() == 0 else format(float(value), ".12g")
+        if role == Qt.ItemDataRole.TextAlignmentRole and index.column() in (1, 2, 3):
+            return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        return None
+
+    def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
+        if role == Qt.ItemDataRole.DisplayRole:
+            if orientation == Qt.Orientation.Horizontal and 0 <= section < 5:
+                return self.HEADERS[section]
+            if orientation == Qt.Orientation.Vertical and 0 <= section < len(self.rows):
+                return str(int(self.rows[section]) + 1)
+        return None
+
+    def sort(self, column, order=Qt.SortOrder.AscendingOrder):
+        if not self._resetting:
+            self.sort_requested.emit(column, order == Qt.SortOrder.AscendingOrder)
+
+===== 来源文件：smartpower/ui/tasks.py；原始行数：17；SHA256：9049f36c14c9debbe32182e50dc169bf6caa5fdcb81f7114b140552790c81604 =====
+"""One bounded background task; widgets are only touched by the owner thread."""
+
+from PySide6.QtCore import QThread
+
+
+class TaskThread(QThread):
+    def __init__(self, operation, parent=None):
+        super().__init__(parent)
+        self.operation = operation
+        self.result = None
+        self.error = None
+
+    def run(self):
+        try:
+            self.result = self.operation()
+        except Exception as exc:
+            self.error = str(exc) or "操作失败，发生未知错误。"
+
+===== 来源文件：smartpower/ui/theme.py；原始行数：24；SHA256：dac4ded8b956cdb90740a91fde72a625d683d94c9f37d6c9fa23b239a1bc5ec9 =====
+"""Shared light theme; retain native title bar and window controls."""
+
+LIGHT_THEME = """
+QWidget { color: #24334b; font-size: 14px; }
+QMainWindow, QWidget#workspace { background: #f4f7fb; }
+QFrame#sidebar { background: #ffffff; border-right: 1px solid #e2e8f0; }
+QLabel { background: transparent; }
+QLabel#brand { font-size: 26px; font-weight: 700; color: #2262cf; }
+QLabel#muted { color: #66768d; }
+QLabel#pageTitle { font-size: 28px; font-weight: 700; }
+QLabel#sectionTitle { font-size: 18px; font-weight: 600; }
+QLabel#badge { color: #2262cf; background: #eaf1ff; border-radius: 6px; padding: 6px 10px; }
+QFrame#card { background: white; border: 1px solid #e2e8f0; border-radius: 12px; }
+QPushButton { background: #ffffff; border: 1px solid #d7e0ee; border-radius: 7px; padding: 10px 16px; }
+QPushButton:hover { background: #edf3ff; border-color: #8eafe6; }
+QPushButton:pressed { background: #dce9ff; }
+QPushButton:focus { border: 2px solid #2262cf; }
+QPushButton#navButton { text-align: left; border: 0; padding: 12px 16px; color: #506078; }
+QPushButton#navButton:checked { background: #eaf1ff; color: #1d58ba; font-weight: 600; }
+QPushButton#navButton:focus { border: 2px solid #2262cf; }
+QStatusBar { background: white; color: #66768d; border-top: 1px solid #e2e8f0; }
+QScrollArea { border: none; background: transparent; }
+QScrollArea > QWidget > QWidget { background: transparent; }
+"""
+
+===== 来源文件：smartpower/ui/widgets.py；原始行数：23；SHA256：031acf61e680dde980412fbdec9430bc7ebaa78f799b615950e709615f079dfd =====
+"""Small reusable presentation components."""
+
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout
+
+
+def label(text: str, role: str = "", parent=None) -> QLabel:
+    widget = QLabel(text, parent)
+    widget.setTextFormat(Qt.TextFormat.PlainText)
+    widget.setWordWrap(True)
+    widget.setObjectName(role)
+    return widget
+
+
+def card(title: str, description: str) -> QFrame:
+    frame = QFrame()
+    frame.setObjectName("card")
+    layout = QVBoxLayout(frame)
+    layout.setContentsMargins(24, 22, 24, 22)
+    layout.setSpacing(12)
+    layout.addWidget(label(title, "sectionTitle"))
+    layout.addWidget(label(description, "muted"))
+    return frame
+
+===== 来源文件：smartpower/visualization/__init__.py；原始行数：1；SHA256：d8c1c9ab860e061853b0e464d55cb9bdb813553a612dcf47f6cb9a60f5607553 =====
+"""Prepared immutable chart snapshots and reusable Qt plotting components."""
+
+===== 来源文件：smartpower/visualization/export.py；原始行数：36；SHA256：bc536dc8574296d6e55f961ce5df3452271ed8c77b51672871a25c069734b476 =====
+"""Atomic PNG writing, separate from UI path selection and confirmation."""
+
+import os
+from pathlib import Path
+import tempfile
+
+from smartpower.data.validation import DataError
+
+
+def save_png(image, path, *, overwrite=False):
+    target = Path(path)
+    if target.suffix.lower() != ".png":
+        raise DataError("图表文件必须使用 .png 扩展名。")
+    temporary = None
+    try:
+        if target.exists() and not overwrite:
+            raise DataError("目标文件已存在，必须先确认覆盖。")
+        with tempfile.NamedTemporaryFile(dir=target.parent, suffix=".png", delete=False) as stream:
+            temporary = Path(stream.name)
+        if not image.save(str(temporary), "PNG"):
+            raise DataError("PNG 图像编码或写入失败。")
+        if overwrite:
+            os.replace(temporary, target)
+        else:
+            # Exclusive creation prevents an intervening writer being overwritten.
+            if os.name == "nt":
+                os.rename(temporary, target)  # Windows rename fails if target exists.
+            else:
+                os.link(temporary, target)
+                temporary.unlink()
+        temporary = None
+    except (OSError, ValueError) as exc:
+        raise DataError(f"PNG 导出失败：{exc}。原文件保留，请检查目录和写入权限。") from exc
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+===== 来源文件：smartpower/visualization/plot_widget.py；原始行数：266；SHA256：3d7b5e6127f9f0bf47ba498c8ff466912fd2907130ac300dc06e78386165dead =====
+"""Reusable time plots. Rendering reduction never changes full sample arrays."""
+
+from pathlib import Path
+
+import numpy as np
+import pyqtgraph as pg
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import (
+    QCheckBox, QFileDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton,
+    QSizePolicy, QVBoxLayout, QWidget,
+)
+
+from smartpower.visualization.export import save_png
+from smartpower.visualization.time_axis import SampleTimeAxis
+from smartpower.ui.paths import default_settings_manager
+
+
+class TimePlotWidget(QWidget):
+    message = Signal(str)
+    MAX_MARKERS = 1500  # Per type and visible range; all events remain in detail table.
+
+    def __init__(self, mode, parent=None):
+        super().__init__(parent)
+        self.mode = mode
+        self.result = self.detection = None
+        self.curves = {}
+        self.markers = {}
+        self._marker_arrays = {}
+        self._revision = 0
+        self.setMinimumWidth(0)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.heading = QLabel("尚无当前数据集的曲线")
+        self.heading.setTextFormat(Qt.TextFormat.PlainText)
+        self.heading.setWordWrap(True)
+        layout.addWidget(self.heading)
+        row = QHBoxLayout()
+        self.reset_button = QPushButton("恢复完整视图")
+        self.export_button = QPushButton("导出 PNG")
+        self.show_anomalies = QCheckBox("显示异常标记")
+        self.show_anomalies.setChecked(True)
+        self.show_anomalies.setVisible(mode != "power")
+        row.addWidget(self.reset_button)
+        row.addWidget(self.export_button)
+        row.addWidget(self.show_anomalies)
+        row.addStretch()
+        layout.addLayout(row)
+        self.visibility_row = QHBoxLayout()
+        layout.addLayout(self.visibility_row)
+        self.curve_checks = {}
+        self.axis = SampleTimeAxis()
+        self.plot = pg.PlotWidget(axisItems={"bottom": self.axis}, background="white")
+        self.plot.setMinimumSize(0, 300)
+        self.plot.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.plot.showGrid(x=True, y=True, alpha=0.15)
+        self.plot.setMenuEnabled(False)  # No untranslated library context menus.
+        self.plot.hideButtons()
+        self.plot.setMouseEnabled(x=True, y=True)
+        self.plot.getViewBox().setMouseMode(pg.ViewBox.PanMode)
+        self.plot.setLabel("left", {"voltage": "电压有效值（V）", "current": "电流有效值（A）",
+                                    "power": "功率数值（P: W；S: VA；|Q|: var）"}[mode])
+        self.plot.getAxis("left").enableAutoSIPrefix(False)
+        self.legend = self.plot.addLegend(offset=(8, 8), labelTextColor="#25334a")
+        layout.addWidget(self.plot, 1)
+        self.readout = QLabel("滚轮缩放，左键拖动平移；悬停曲线查看完整精度采样值。")
+        self.readout.setWordWrap(True)
+        self.readout.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(self.readout)
+        self.marker_note = QLabel("未启用阈值检测；请到“异常检测”设置阈值并开始检测。")
+        self.marker_note.setWordWrap(True)
+        layout.addWidget(self.marker_note)
+        self.reset_button.clicked.connect(self.reset_view)
+        self.export_button.clicked.connect(self.export_png)
+        self.show_anomalies.toggled.connect(self._refresh_markers)
+        self.plot.getViewBox().sigXRangeChanged.connect(self._refresh_markers)
+        self._mouse_proxy = pg.SignalProxy(self.plot.scene().sigMouseMoved, rateLimit=20, slot=self._mouse_moved)
+        self.export_button.setEnabled(False)
+
+    def clear(self):
+        self._revision += 1
+        self.result = None
+        self.clear_detection()
+        self.plot.clear()
+        self.curves.clear()
+        self.legend.clear()
+        for check in self.curve_checks.values():
+            self.visibility_row.removeWidget(check)
+            check.deleteLater()
+        self.curve_checks.clear()
+        self.axis.origin = None
+        self.heading.setText("尚无当前数据集的曲线")
+        self.readout.setText("请先选择数据集并开始分析。")
+        self.export_button.setEnabled(False)
+
+    def set_result(self, result):
+        self.clear()
+        self.result = result
+        sample = result.samples
+        self.axis.origin = sample.origin
+        source = "模拟数据，非真实设备测量" if result.simulated else result.source
+        title = {"voltage": "电压有效值时间曲线", "current": "电流有效值时间曲线", "power": "单相功率时间曲线"}[self.mode]
+        self.heading.setText(f"{title} · {result.dataset_name}\n{result.count} 条采样 · {source}")
+        if self.mode == "power":
+            series = [("P（W）", result.power.active, "#2563eb"),
+                      ("S（VA）", result.power.apparent, "#16805d"),
+                      ("|Q|（var，绝对值）", result.power.reactive_abs, "#9b44b5")]
+        else:
+            values = sample.voltage if self.mode == "voltage" else sample.current
+            series = [("电压有效值（V）" if self.mode == "voltage" else "电流有效值（A）", values, "#2563eb")]
+        for name, values, color in series:
+            # Attach first: in 0.14 enabling clipToView during scene insertion can
+            # resolve a temporary PlotWidget rather than the final ViewBox.
+            curve = self.plot.plot(name=name, pen=pg.mkPen(color, width=1), antialias=False)
+            curve.setData(sample.seconds, values[sample.order])
+            curve.setDownsampling(auto=True, method="peak")
+            curve.setClipToView(True)
+            self.curves[name] = curve
+            if self.mode == "power":
+                check = QCheckBox(name)
+                check.setChecked(True)
+                check.toggled.connect(curve.setVisible)
+                self.visibility_row.addWidget(check)
+                self.curve_checks[name] = check
+        self.readout.setText("滚轮缩放，左键平移；按时间稳定排序显示，重复时间全部保留。悬停查看原始行。")
+        self.export_button.setEnabled(True)
+        if self.mode == "power":
+            self.marker_note.setText("单相正弦稳态模型；共享数值轴，各曲线单位分别为 W、VA、var；|Q| 为绝对值。")
+        self.reset_view()
+
+    def reset_view(self):
+        if self.result is not None:
+            # autoRange can otherwise use clipped display data after a zoom.
+            sample = self.result.samples
+            self.plot.setXRange(float(sample.seconds[0]), float(sample.seconds[-1]), padding=0.03)
+            values = [curve.yData for curve in self.curves.values() if curve.isVisible()]
+            if values:
+                self.plot.setYRange(float(min(np.min(v) for v in values)),
+                                    float(max(np.max(v) for v in values)), padding=0.08)
+
+    def describe_point(self, sorted_index):
+        result = self.result
+        row = int(result.samples.order[sorted_index])
+        time = np.datetime_as_string(result.times[row], unit="ns").replace("T", " ")
+        if self.mode == "power":
+            text = (f"P={result.power.active[row]:.12g} W；S={result.power.apparent[row]:.12g} VA；"
+                    f"|Q|={result.power.reactive_abs[row]:.12g} var")
+        else:
+            value = result.samples.voltage[row] if self.mode == "voltage" else result.samples.current[row]
+            text = f"{value:.12g} {'V' if self.mode == 'voltage' else 'A'}"
+        return f"原始记录索引 {row}（第 {row + 1} 行） · {time} · {text}"
+
+    def _mouse_moved(self, args):
+        if self.result is None or not self.plot.sceneBoundingRect().contains(args[0]):
+            return
+        point = self.plot.getViewBox().mapSceneToView(args[0])
+        xs = self.result.samples.seconds
+        right = min(int(np.searchsorted(xs, point.x())), len(xs) - 1)
+        index = min((max(0, right - 1), right), key=lambda j: abs(xs[j] - point.x()))
+        # Repeated timestamps: choose nearest y among all original rows at that time.
+        left, right = np.searchsorted(xs, xs[index], side="left"), np.searchsorted(xs, xs[index], side="right")
+        if right - left > 1:
+            values = next(iter(self.curves.values())).yData
+            index = int(left + np.argmin(np.abs(values[left:right] - point.y())))
+        self.readout.setText(self.describe_point(index))
+
+    def clear_detection(self):
+        self.detection = None
+        self._marker_arrays.clear()
+        for marker in self.markers.values():
+            self.plot.removeItem(marker)
+            self.legend.removeItem(marker)
+        self.markers.clear()
+        self.marker_note.setText("单相正弦稳态模型；共享数值轴，单位分别为 W、VA、var；|Q| 为绝对值。" if self.mode == "power"
+                                 else "无匹配的阈值检测结果；请到“异常检测”设置并启用检测。")
+
+    def set_detection(self, detection):
+        self.clear_detection()
+        result = self.result
+        if (result is None or detection is None or self.mode == "power"
+                or detection.dataset_id != result.dataset_id
+                or detection.fingerprint != result.samples.fingerprint
+                or detection.dataset_name != result.dataset_name
+                or detection.source != result.source):
+            return
+        self.detection = detection
+        row_x = np.empty(result.count)
+        row_x[result.samples.order] = result.samples.seconds
+        for kind, color, symbol in (("电压偏低", "#e69300", "t"), ("电压偏高", "#d83245", "t1"),
+                                    ("电流偏高", "#d83245", "x")):
+            relevant = [event for event in detection.events if event.kind == kind
+                        and event.parameter == ("电压" if self.mode == "voltage" else "电流")]
+            if not relevant:
+                continue
+            relevant.sort(key=lambda event: row_x[event.row_index])
+            self._marker_arrays[kind] = (np.array([row_x[e.row_index] for e in relevant]), relevant)
+            marker = pg.ScatterPlotItem(size=9, pen=pg.mkPen(color), brush=pg.mkBrush(color), symbol=symbol,
+                                        hoverable=True, tip=lambda x, y, data: self.event_text(data))
+            marker.sigClicked.connect(self._marker_clicked)
+            self.plot.addItem(marker)
+            self.legend.addItem(marker, kind)
+            self.markers[kind] = marker
+        self._refresh_markers()
+
+    @staticmethod
+    def event_text(event):
+        return (f"{event.timestamp} · 原始索引 {event.row_index} · {event.kind}\n"
+                f"采样值 {event.value:.12g} {event.unit} · 阈值 {event.threshold:.12g} {event.unit}")
+
+    def _marker_clicked(self, item, points, event):
+        if points:
+            self.readout.setText(self.event_text(points[0].data()))
+
+    def _refresh_markers(self, *_):
+        if self.detection is None:
+            return
+        low, high = self.plot.viewRange()[0]
+        displayed = 0
+        for kind, (xs, events) in self._marker_arrays.items():
+            start, stop = np.searchsorted(xs, [low, high])
+            stop = min(len(xs), stop + 1)
+            indices = np.arange(start, stop)
+            if len(indices) > self.MAX_MARKERS:
+                indices = indices[np.linspace(0, len(indices) - 1, self.MAX_MARKERS, dtype=int)]
+            chosen = [events[j] for j in indices]
+            self.markers[kind].setData(x=xs[indices], y=[e.value for e in chosen], data=chosen)
+            self.markers[kind].setVisible(self.show_anomalies.isChecked())
+            displayed += len(chosen)
+        t = self.detection.thresholds
+        self.marker_note.setText(f"当前阈值：电压 {t.voltage_lower:g}～{t.voltage_upper:g} V；电流上限 {t.current_upper:g} A。"
+                                 f"视区代表标记 {displayed} 个，每类最多 {self.MAX_MARKERS} 个；完整事件请看异常明细。")
+
+    def capture_image(self):
+        if self.result is None:
+            raise ValueError("尚无当前数据集的图表，请先分析。")
+        image = self.grab().toImage()
+        # PNG keyword names must be Latin-1; Qt writes Unicode values as iTXt.
+        image.setText("Dataset", self.result.dataset_name)
+        image.setText("Source", "模拟数据，非真实设备测量" if self.result.simulated else self.result.source)
+        return image
+
+    def export_png(self):
+        if self.result is None:
+            self.message.emit("请先分析当前数据集，再导出图表。")
+            return
+        revision = self._revision
+        settings = default_settings_manager().load().value
+        path, _ = QFileDialog.getSaveFileName(self, "导出当前图表 PNG", str(Path(settings.chart_directory) / "曲线.png"), "PNG 图像 (*.png)",
+                                             options=QFileDialog.Option.DontConfirmOverwrite)
+        if not path:
+            return
+        if Path(path).suffix == "":
+            path += ".png"
+        overwrite = Path(path).exists()
+        if overwrite and QMessageBox.question(self, "确认覆盖", "文件已存在，是否覆盖？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
+        if revision != self._revision or self.result is None:
+            self.message.emit("数据集已变化，本次导出已取消，请重新分析后导出。")
+            return
+        try:
+            image = self.capture_image()  # GUI-thread snapshot, no event processing until write ends.
+            save_png(image, path, overwrite=overwrite)
+            self.message.emit(f"PNG 已导出：{path}")
+        except Exception as exc:
+            self.message.emit(f"图表导出失败：{exc}")
+
+===== 来源文件：smartpower/visualization/snapshot.py；原始行数：46；SHA256：fa4e66efdffecad117cb19957ecc0fa1d71c70924ffb881b98c23b8fdb0dcb61 =====
+"""GUI-independent identity and stable time-order preparation."""
+
+from dataclasses import dataclass
+from hashlib import sha256
+
+import numpy as np
+
+
+def timestamp_parts(frame):
+    times = frame["时间"].to_numpy()
+    seconds = times.astype("datetime64[s]")
+    fractions = (times - seconds).astype("timedelta64[ns]").astype("<i8")
+    return times, seconds.astype("<i8"), fractions
+
+
+def frame_fingerprint(frame):
+    digest = sha256()
+    _, seconds, fractions = timestamp_parts(frame)
+    digest.update(seconds.tobytes())
+    digest.update(fractions.tobytes())
+    digest.update(frame[["电压", "电流", "功率因数"]].to_numpy(dtype="<f8").tobytes())
+    return digest.hexdigest()
+
+
+@dataclass(frozen=True)
+class PlotSamples:
+    fingerprint: str
+    order: np.ndarray
+    seconds: np.ndarray
+    origin: np.datetime64
+    voltage: np.ndarray
+    current: np.ndarray
+
+
+def prepare_samples(frame):
+    times, ticks, fractions = timestamp_parts(frame)
+    order = np.argsort(times, kind="stable")
+    origin = times[order[0]]
+    # Relative seconds preserve subsecond precision near modern dates. Avoid int64
+    # subtraction overflow for data spanning the whole supported datetime range.
+    seconds = ((ticks[order] - ticks[order[0]]).astype(float)
+               + (fractions[order] - fractions[order[0]]) / 1e9)
+    arrays = [order, seconds, frame["电压"].to_numpy(copy=True), frame["电流"].to_numpy(copy=True)]
+    for array in arrays:
+        array.setflags(write=False)
+    return PlotSamples(frame_fingerprint(frame), order, seconds, origin, arrays[2], arrays[3])
+
+===== 来源文件：smartpower/visualization/time_axis.py；原始行数：26；SHA256：c802bddec7c54f4e9f48961c2a9db96762a1ec6ee766003e4aec9eafa345407f =====
+"""Calendar labels for local, timezone-free sampling times (no DST conversion)."""
+
+import numpy as np
+import pyqtgraph as pg
+
+
+class SampleTimeAxis(pg.AxisItem):
+    def __init__(self):
+        super().__init__(orientation="bottom")
+        self.origin = None
+        self.setLabel("采样时间（本地无时区）")
+        self.enableAutoSIPrefix(False)
+
+    def tickStrings(self, values, scale, spacing):
+        if self.origin is None:
+            return [""] * len(values)
+        labels = []
+        for value in values:
+            try:
+                # Calendar formatting via datetime64 avoids system timezone/epoch limits.
+                stamp = self.origin.astype("datetime64[ms]") + np.timedelta64(round(value * 1000), "ms")
+                labels.append(np.datetime_as_string(stamp, unit="ms").replace("T", "\n")
+                              if spacing < 1 else np.datetime_as_string(stamp, unit="s").replace("T", "\n"))
+            except (ValueError, OverflowError):
+                labels.append("")
+        return labels

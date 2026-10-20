@@ -27,8 +27,8 @@ def export(commit, output):
         excerpt.append(text)
         if not text.endswith('\n'):excerpt.append('\n')
     manifest.append(f'\n合计{len(names)}个项目Python源文件、{total}行（含原有空行）。未套用未经核对的固定页数/页行数。用户手册、设计和测试另见docs；构建/安装脚本不伪装为业务源程序。\n')
-    (directory/'SOURCE_MANIFEST.md').write_text('\n'.join(manifest),encoding='utf-8')
-    (directory/'SOURCE_EXCERPT_V1.0.txt').write_text(''.join(excerpt),encoding='utf-8')
+    (directory/'SOURCE_MANIFEST.md').write_text('\n'.join(manifest),encoding='utf-8',newline='\n')
+    (directory/'SOURCE_EXCERPT_V1.0.txt').write_text(''.join(excerpt),encoding='utf-8',newline='\n')
     print(resolved,len(names),total)
 
 
