@@ -1,105 +1,144 @@
 # 智电析电力系统运行数据分析与可视化软件 V1.0
 
-SmartPowerAnalyzer 是一款面向 Windows 的电力系统运行数据分析桌面软件。
-当前开发版本为 **V0.1.0 基础框架**；产品正式名称中的 V1.0 与开发版本分别管理。
+Windows 桌面软件，开发版本 **V0.2.0 数据管理系统**。按本次确认使用 64 位 Python 3.13。
+产品正式名称中的 V1.0 与开发版本分别管理。V0.1 的八个页面、导航、首页入口和原生窗口操作均保留。
 
-## 本次功能范围
+## 安装与运行
 
-- PySide6 原生桌面主窗口，浅色界面、左侧导航、状态栏。
-- 首页、数据管理、电压分析、电流分析、功率分析、异常检测、分析报告、系统设置共八个页面。
-- 使用 `QStackedWidget` 切换，导航选中状态同步；首页快捷入口、键盘 Tab/空格操作可用。
-- 保留 Windows 原生标题栏及最小化、最大化、关闭、拖拽缩放能力；最小窗口为 900 × 620，内容可滚动。
-- 软件与环境信息展示、SQLite 元数据初始化基础模块、自动化测试及 Windows CI。
-
-**当前尚未实现**数据导入、分析算法、图表、异常检测、报告导出及可修改设置。
-各业务页面明确标注待开发，不包含模拟指标、曲线或虚假分析结果。
-Pandas、NumPy 和 PyQtGraph 已作为后续开发依赖安装和验证；当前不调用它们生成任何数据。
-SQLite 使用 Python 标准库 `sqlite3`，无需额外安装数据库服务；启动程序不会创建数据库。
-
-## 安装（Windows PowerShell）
-
-按当前确认的开发环境，使用 **64 位 Python 3.13**。
+在 Windows PowerShell 执行，推荐较短的目录，避免 Windows 路径长度限制：
 
 ```powershell
 git clone https://github.com/sunyiyang299-cell/SmartPowerAnalyzer.git
 cd SmartPowerAnalyzer
-# 本 PR 合并前，切换到开发分支：
-git switch feat/v0.1-desktop-framework
+git switch feature/v0.2-data-management
 py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m pip check
-```
-
-若未安装 Python Launcher，可用指向 Python 3.13 的 `python` 替代 `py -3.13`。
-无需激活虚拟环境，直接调用其中的 Python，避免 PowerShell 脚本执行策略限制。
-若安装 Qt 时出现 Windows 路径过长错误，请将仓库和虚拟环境放到较短的路径（例如 `C:\dev\SmartPowerAnalyzer`），再安装依赖。
-
-## 运行
-
-在项目根目录执行：
-
-```powershell
 .\.venv\Scripts\python.exe main.py
 ```
 
-点击左侧任一模块可切换页面，首页也提供数据管理和设置入口。设置页展示真实运行时版本信息。
-本阶段无需外部数据文件、账号、网络服务或数据库配置，也尚未提供 `.exe` 安装包。
+如果没有 Python Launcher，可用指向 Python 3.13 的 `python` 替代 `py -3.13`。
+直接调用虚拟环境的 Python，无需修改 PowerShell 执行策略。当前提供源码运行，尚无 `.exe` 安装包。
+运行依赖为 PySide6、Pandas、NumPy、PyQtGraph 和 Excel 引擎 openpyxl；SQLite 是 Python 标准库。
 
-## 测试
+## 导入、校验与预览
 
-测试使用 Python 标准库 `unittest` 和 PySide6 自带的 `QTest`，无需 pytest 等额外依赖。
+1. 打开“数据管理”，点击“导入 CSV / Excel”，选择 `.csv` 或 `.xlsx`；支持中文路径。
+2. 文件第一行为表头，必须包含下面四个中文字段。CSV 支持 UTF-8（含 BOM）和 GB18030，采用逗号分隔；Excel 读取第一个工作表。
+3. 后台解析并校验全部记录，成功后显示预览。输入数据集名称，点击“保存数据集”才会写入 SQLite。
+4. 任意一条记录错误都会拒绝本次文件，显示字段、数据行号和原因，不静默丢弃或填补记录。失败后保留原预览和历史数据。
+
+| 字段 | 约定与校验 |
+| --- | --- |
+| 时间 | 本地无时区日期时间，例如 `2026-10-20 10:00:00`；支持年月日、日期加时分秒及小数秒，也支持格式化的 Excel 日期单元格 |
+| 电压 | 单相交流电压有效值，单位 V，有限数值且 ≥ 0 |
+| 电流 | 单相交流电流有效值，单位 A，有限数值且 ≥ 0 |
+| 功率因数 | 非负功率因数，有限数值，0～1（含端点） |
+
+不猜测数字时间戳的单位、Excel 纯数字日期序号或时区，遇到这些格式请先转换。
+表头首尾空格可忽略；重复表头会被拒绝。缺失值、非法数字、NaN、正负无穷和不可能日期均有提示。
+错误详情最多展示前 40 处，同时报告总错误数；数据第 1 行指表头之后的第一条记录。
+额外字段会明确提示“不参与预览和保存”，保存内容为上述四个字段及数据集元信息。
+导入文件标记为“来源未核验”，不代表软件已验证真实设备来源。
+
+## 表格、筛选与排序
+
+- QTableView 采用只读模型，支持水平和垂直滚动、选择记录，显示全部已通过校验的数据。
+- 点击表头按列升降序排列，数值按数值大小排列，时间按日期时间排列；来源列为数据集统一标记。
+- 选择“全部字段”或指定字段，输入包含文本，点击“筛选”；按文字包含关系匹配，不使用正则表达式。点击“清除”恢复全部记录。
+- 显示总记录数及当前显示数。排序和筛选仅改变视图，**保存及模拟 CSV 导出始终使用全部记录**。
+- 解析、校验、生成、数据库读写、筛选、排序和 CSV 导出在后台线程执行。任务期间可以切换导航，操作按钮暂时禁用，关闭窗口会提示等待任务完成。
+- 导入数据采用内存加载，尚非流式数据库分页。已测试十万条 CSV；可处理规模仍取决于内存、文件复杂度和硬件，不承诺无限大文件。
+
+## SQLite 历史数据集
+
+点击“刷新历史”初始化/读取本地数据库，再选择历史数据集并点击“读取”。列表显示名称、记录数、导入时间和来源标记。
+数据库路径显示在数据管理页底部，默认使用 Qt 的用户本地应用数据目录（Windows 下通常位于 `%LOCALAPPDATA%`）；以界面展示的实际路径为准。
+需要指定路径时，在启动前设置：
 
 ```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s tests -p test_structure.py -v
-.\.venv\Scripts\python.exe -m unittest discover -s tests -p test_database.py -v
-.\.venv\Scripts\python.exe -m unittest discover -s tests -p test_window.py -v
-.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+$env:SMARTPOWER_DB_PATH = "C:\你的数据目录\datasets.sqlite3"
+.\.venv\Scripts\python.exe main.py
 ```
 
-GUI 测试默认使用 Qt `offscreen` 后端，验证页面、鼠标点击、快捷入口、键盘、导航同步、缩放及窗口状态。
-这不能替代真实 Windows 桌面上的人工交互验收。在可用的 Windows 桌面中，可额外运行原生后端测试（会短暂显示测试窗口）：
+保存与删除使用事务，失败时回滚，错误明确显示，预览保留以便重试。程序不会因导入文件错误或常见数据库操作失败直接退出。
+“删除”仅删除指定数据集及其采样记录，弹出中文确认框，默认“取消”。删除当前已加载数据集后，内存预览仍保留并重新标记为未保存。
+替换未保存预览及退出前会询问是否放弃预览。历史记录不会被导入自动覆盖；同名保存作为独立数据集管理。
+首次使用可升级 V0.1 的元数据模式至版本 2；检测到更高版本则拒绝操作，不降级覆盖。
+启动主窗口本身不创建数据库；首次刷新历史或保存时才初始化。备份时请关闭程序，再复制界面显示的 SQLite 文件。
+
+## 模拟数据
+
+点击“生成 1000 条模拟数据”可预览单相交流演示数据：电压 218～242 V、电流 0.5～25 A、功率因数 0.85～1，时间从 `2026-01-01 00:00:00` 起每秒一条。
+这些范围仅用于软件演示，不作为设备合格判据或电气分析结果。数据采用固定随机种子，便于重复测试。
+界面、历史列表、数据库元数据及导出 CSV 的“数据来源”列均标注模拟数据，不冒充真实设备测量。
+模拟 CSV 重新导入后仍保留模拟标记；混有模拟标记的文件整批按模拟数据标记。
+
+点击“导出模拟 CSV”选择目标路径，覆盖已有文件需要确认；临时文件写完后原子替换目标文件，失败时保留原文件。
+也可独立运行生成模块：
+
+```powershell
+.\.venv\Scripts\python.exe -m smartpower.data.demo --output "模拟数据.csv"
+```
+
+命令行默认拒绝覆盖已有文件；确需覆盖时显式加 `--overwrite`。
+数据来源列是用户可编辑的文件标记，不具备防篡改证明能力。
+
+## 自动化测试
+
+新增测试使用 Pytest，原有 unittest 用例保留，由 Pytest 一并收集。仅开发测试需要 `requirements-dev.txt`：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m pytest tests/test_importer.py -q
+.\.venv\Scripts\python.exe -m pytest tests/test_repository.py tests/test_database.py -q
+.\.venv\Scripts\python.exe -m pytest tests/test_demo.py tests/test_query.py -q
+.\.venv\Scripts\python.exe -m pytest tests/test_data_ui.py -q
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m pip check
+```
+
+GUI 测试默认 `offscreen`。Windows 原生后端复验（会短暂显示窗口）：
 
 ```powershell
 $env:QT_QPA_PLATFORM = "windows"
-.\.venv\Scripts\python.exe -m unittest tests.test_window -v
+.\.venv\Scripts\python.exe -m pytest tests/test_window.py tests/test_data_ui.py tests/test_entrypoint.py -q
 Remove-Item Env:QT_QPA_PLATFORM
 ```
 
-手工验收：启动 `main.py`，逐一点击八个导航；检查选中项、标题及说明；检查首页两个入口；最大化、还原、最小化及恢复；拖动边框缩放；在最小尺寸下滚动内容并通过 Tab/空格操作按钮。分析页应始终显示待开发说明。
+CI 在 Windows/Python 3.13 下运行 Pytest。测试涵盖 CSV/Excel、中文路径、字段和数值校验、事务回滚、读写删除、模拟数据标记、原子导出、模型排序筛选、十万条后台导入响应及窗口保护。
+本阶段实际执行结果及新增文件清单见 [V0.2 验证记录](docs/VALIDATION_V0.2.md)，V0.1 记录保留作历史参考。
+沙箱环境如不能访问默认临时目录，可将 `TEMP`、`TMP` 和 Pytest 的 `--basetemp` 指向有写入权限的工作目录；不要通过跳过失败测试规避问题。
 
-## 项目结构
+## 模块结构与扩展
 
 ```text
-main.py                         程序入口
-requirements.txt                固定版本的四项直接依赖
+main.py                         桌面入口
 smartpower/
+  application.py                Qt 初始化、中文翻译、事件循环
   config.py                     正式名称、开发版本
-  application.py                QApplication 创建、主题、事件循环
-  ui/
-    main_window.py              主窗口、导航及页面栈
-    theme.py                    浅色样式
-    widgets.py                  共享标签、卡片
-    pages/
-      base.py                   可滚动页面壳
-      registry.py               八个页面的注册、顺序及构造
-      home.py                   首页及快捷入口
-      features.py               业务模块待开发页面
-      settings.py               软件与运行环境信息
+  data/
+    validation.py               独立字段、时间和电气数值校验
+    importer.py                 Pandas CSV / Excel 导入及数据集对象
+    demo.py                     独立模拟数据生成、原子 CSV 导出与命令行
+    query.py                    后台排序筛选视图索引
   storage/
-    database.py                 显式 SQLite 初始化边界
-tests/
-  test_entrypoint.py            子进程验证 main.py 事件循环与退出
-  test_structure.py             名称、入口和技术栈导入检查
-  test_database.py              初始化、幂等性、无分析数据检查
-  test_window.py                导航、页面、快捷入口和窗口行为
-.github/workflows/tests.yml     Windows / Python 3.13 CI
+    database.py                 保留 V0.1 元数据初始化接口
+    repository.py               SQLite 模式升级、事务与历史数据仓库
+  ui/
+    main_window.py              主窗口、导航、退出保护
+    tasks.py                    后台任务，结果在主线程消费
+    table_model.py              QAbstractTableModel，只读按需取值
+    pages/data_management.py    数据管理控件和任务编排
+    pages/registry.py           八个页面注册表
+    pages/{base,home,features,settings}.py
+    theme.py / widgets.py       共用浅色样式和控件
+tests/                          V0.1 回归及 V0.2 Pytest 测试
+requirements.txt                运行依赖
+requirements-dev.txt            测试依赖
+.github/workflows/tests.yml     Windows CI
 ```
 
-## 后续扩展
+数据处理和数据库模块不依赖 Qt。界面通过后台任务调用它们，模型更新仅在 GUI 线程执行；新增分析算法仍应放在独立服务中。
+电压、电流、功率分析、异常检测和报告页在本阶段继续保留待开发说明，没有新增虚假分析结果。
 
-新增页面时创建独立的页面模块，并在 `PAGE_SPECS` 中注册稳定 key、名称及工厂，导航会自动生成。
-业务逻辑应放入后续独立的服务模块，数据访问放入 `storage`；页面负责展示与用户操作，不直接混入计算或 SQL。
-当前 `initialize_database(path)` 仅显式建立模式版本元数据，不插入电气记录；后续数据结构变更须引入迁移。
-电气算法需先约定数据字段、采样时间、单位、计算方法和限值来源，并以已知输入与期望值编写测试后接入界面。
-
-Qt 页面切换与互斥导航采用官方接口，参见 [QStackedWidget](https://doc.qt.io/qtforpython-6/PySide6/QtWidgets/QStackedWidget.html) 和 [QButtonGroup](https://doc.qt.io/qtforpython-6/PySide6/QtWidgets/QButtonGroup.html)。
+接口参考：[Pandas read_excel](https://pandas.pydata.org/docs/reference/api/pandas.read_excel.html)、[Qt 表格模型](https://doc.qt.io/qtforpython-6.6/PySide6/QtCore/QAbstractTableModel.html)、[Qt QThread](https://doc.qt.io/qtforpython-6.10/PySide6/QtCore/QThread.html)。

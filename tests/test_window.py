@@ -70,7 +70,10 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(self.window.stack.currentIndex(), 4)
 
     def test_feature_pages_explicitly_describe_unimplemented_state(self):
-        for key in ("data", "voltage", "current", "power", "anomalies", "reports"):
+        from smartpower.ui.pages.data_management import DataManagementPage
+        self.assertIsInstance(self.window.pages["data"], DataManagementPage)
+        self.assertTrue(self.window.pages["data"].import_button.isEnabled())
+        for key in ("voltage", "current", "power", "anomalies", "reports"):
             with self.subTest(page=key):
                 texts = " ".join(w.text() for w in self.window.pages[key].findChildren(QLabel))
                 self.assertIn("待开发", texts)
@@ -102,4 +105,4 @@ class WindowTests(unittest.TestCase):
             self.window.navigate(spec.key)
             self.app.processEvents()
             page = self.window.pages[spec.key]
-            self.assertLessEqual(page.widget().minimumSizeHint().width(), page.viewport().width())
+            self.assertLessEqual(page.widget().minimumSizeHint().width(), page.viewport().width(), spec.key)
