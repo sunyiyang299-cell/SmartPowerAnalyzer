@@ -58,6 +58,7 @@ class ReportsPage(BasePage):
             form.addRow(text, edit)
         self.content.addLayout(form)
         self.content.addWidget(label("不勾选时明确标注“本次未执行异常检测”，不会写成零异常。用户阈值不是国家标准限值，等于阈值不计异常。", "muted"))
+        self.content.addWidget(label("大量采样或密集异常会生成很长的完整报告，并占用较多时间与内存。导出期间请等待完成；当前不支持取消。需要逐条筛选时建议使用 Excel。", "muted"))
         row = QHBoxLayout()
         self.pdf_button, self.excel_button = QPushButton("生成 PDF 报告"), QPushButton("生成 Excel 报告")
         row.addWidget(self.pdf_button)

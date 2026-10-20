@@ -6,3 +6,7 @@ __pycache__/
 .coverage
 work/
 .pytest_cache/
+
+# Local generated QA artifacts and export directories
+output/
+qa-output/
