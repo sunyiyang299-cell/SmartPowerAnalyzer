@@ -12,14 +12,14 @@ class HomePage(BasePage):
 
     def __init__(self, parent=None):
         super().__init__("首页", "欢迎使用智电析，集中管理电力系统运行数据与分析工作。", parent)
-        self.content.addWidget(label("V0.1 基础框架", "badge"))
+        self.content.addWidget(label("V0.2 数据管理", "badge"))
         self.content.addWidget(card(
             "从运行数据开始",
-            "当前版本已提供八个模块的导航与页面框架。数据导入、计算、图表和报告功能将在后续版本实现。",
+            "前往数据管理导入 CSV / Excel，校验并预览数据后手动保存；也可生成明确标记的模拟数据进行演示。计算、图表和报告将在后续实现。",
         ))
         self.content.addWidget(card(
-            "尚无运行数据",
-            "当前未连接数据源，不显示统计指标、示例曲线或模拟分析结论。",
+            "数据来源清晰可见",
+            "文件导入仅表示来源未核验；演示数据明确标为模拟。请在数据管理查看预览和历史记录，当前不生成电气分析结论。",
         ))
         shortcuts = QHBoxLayout()
         self.data_button = QPushButton("前往数据管理 →")

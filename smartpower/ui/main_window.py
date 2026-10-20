@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QPushButton, QStackedWidget, QVBoxLayout, QWidget,
 )
 
-from smartpower.config import APP_NAME
+from smartpower.config import APP_NAME, APP_VERSION
 from smartpower.ui.pages.home import HomePage
 from smartpower.ui.pages.registry import PAGE_SPECS
 from smartpower.ui.widgets import label
@@ -52,7 +52,7 @@ class MainWindow(QMainWindow):
             if isinstance(page, HomePage):
                 page.navigate_requested.connect(self.navigate)
         navigation.addStretch()
-        navigation.addWidget(label("V0.1 · 基础框架", "muted"))
+        navigation.addWidget(label(f"V{APP_VERSION} · 数据管理", "muted"))
         layout.addWidget(sidebar)
         layout.addWidget(self.stack, 1)
         self.setCentralWidget(workspace)
@@ -68,4 +68,15 @@ class MainWindow(QMainWindow):
 
     def _sync_navigation(self, index: int) -> None:
         self.navigation_group.button(index).setChecked(True)
-        self.statusBar().showMessage(f"当前页面：{PAGE_SPECS[index].title}  |  V0.1 基础框架")
+        self.statusBar().showMessage(f"当前页面：{PAGE_SPECS[index].title}  |  V{APP_VERSION}")
+
+    def closeEvent(self, event):
+        page = self.pages["data"]
+        if page.busy:
+            page.notify("后台任务尚未完成，请等待结束后再关闭窗口。")
+            self.navigate("data")
+            event.ignore()
+        elif not page.confirm_discard():
+            event.ignore()
+        else:
+            super().closeEvent(event)

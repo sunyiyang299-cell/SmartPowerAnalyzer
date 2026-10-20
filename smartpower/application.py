@@ -3,6 +3,7 @@
 import sys
 
 from PySide6.QtGui import QFont
+from PySide6.QtCore import QLibraryInfo, QTranslator
 from PySide6.QtWidgets import QApplication
 
 from smartpower.config import APP_NAME, APP_VERSION, ORGANIZATION
@@ -20,6 +21,11 @@ def create_application(argv: list[str] | None = None) -> QApplication:
     app.setStyle("Fusion")
     app.setFont(QFont("Microsoft YaHei UI", 10))
     app.setStyleSheet(LIGHT_THEME)
+    if not hasattr(app, "_chinese_translator"):
+        translator = QTranslator(app)
+        if translator.load("qtbase_zh_CN", QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)):
+            app.installTranslator(translator)
+        app._chinese_translator = translator
     return app
 
 

@@ -21,6 +21,6 @@ class SettingsPage(BasePage):
         ))
         self.content.addWidget(card(
             "后续扩展",
-            "数据路径、分析参数及报告选项将在对应功能实现后加入。当前启动不会创建数据库或写入分析数据。",
+            "数据管理页显示实际数据库路径。点击刷新历史或保存时初始化本地数据库；分析参数及报告选项将在后续版本加入。",
         ))
         self.content.addStretch()

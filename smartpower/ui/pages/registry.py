@@ -6,6 +6,7 @@ from typing import Callable
 from PySide6.QtWidgets import QWidget
 
 from smartpower.ui.pages.features import FeaturePage
+from smartpower.ui.pages.data_management import DataManagementPage
 from smartpower.ui.pages.home import HomePage
 from smartpower.ui.pages.settings import SettingsPage
 
@@ -19,9 +20,7 @@ class PageSpec:
 
 PAGE_SPECS = (
     PageSpec("home", "首页", HomePage),
-    PageSpec("data", "数据管理", lambda: FeaturePage(
-        "数据管理", "管理电力系统运行数据，为后续分析准备可靠的数据源。",
-        "计划支持数据文件导入、字段映射、格式校验与数据集管理。当前未实现导入或存储操作。")),
+    PageSpec("data", "数据管理", DataManagementPage),
     PageSpec("voltage", "电压分析", lambda: FeaturePage(
         "电压分析", "查看与分析电压运行特征。",
         "计划支持电压趋势、统计与限值检查；分析前需明确单位、采样时间及限值来源。")),
