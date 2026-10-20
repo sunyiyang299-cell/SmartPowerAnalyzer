@@ -1,0 +1,61 @@
+name: Windows release candidate build
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packaging/**'
+      - 'smartpower/**'
+      - 'main.py'
+      - 'tools/**'
+      - 'requirements*'
+      - '.github/workflows/windows-release.yml'
+permissions:
+  contents: read
+jobs:
+  build-verify:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: requirements-windows-build.lock
+      - name: Install locked build environment
+        run: |
+          python -m pip install pip==26.2.1
+          python -m pip install -r requirements-windows-build.lock
+      - name: Full source regression and syntax
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python -m pip check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m compileall -q main.py smartpower tests tools
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pytest -q
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify official Inno Setup tool
+        run: ./packaging/setup_inno.ps1 -OutputDirectory ./build/inno-tool
+      - name: Build and run real frozen candidate, installer and portable ZIP
+        env:
+          QT_QPA_PLATFORM: windows
+        run: ./packaging/build_windows.ps1 -Python python -Installer -Iscc ./build/inno-tool/compiler/ISCC.exe
+      - name: Real current-user installation, shortcut, business, uninstall and reinstall
+        run: python tools/verify_installer.py release/SmartPowerAnalyzer-Setup-1.0.0.exe build/installer-check
+      - name: Upload candidate artifacts only (no Release or tag)
+        uses: actions/upload-artifact@v4
+        with:
+          name: SmartPowerAnalyzer-1.0.0-Windows-${{ github.sha }}
+          retention-days: 14
+          path: |
+            release/*.exe
+            release/*.zip
+            release/*.pdf
+            release/*.md
+            release/SHA256SUMS.txt
+            release/ARTIFACTS.json
+            build/installer-check/installer-verification.json
+            build/pyinstaller/frozen-verification-*/frozen-verification.json

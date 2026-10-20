@@ -1,0 +1,16 @@
+{
+  "ordinary_user": true,
+  "desktop_shortcut": "NOT TESTED (optional task not selected)",
+  "clean_machine": false,
+  "install": "PASS",
+  "installed_directory_launch": "PASS",
+  "start_menu_launch": "PASS",
+  "installed_full_business": "PASS",
+  "uninstall": "PASS",
+  "user_data_retained_byte_for_byte": "PASS",
+  "reinstall": "PASS",
+  "data_read_after_reinstall": "PASS",
+  "final_uninstall": "PASS",
+  "installation_directory_clean": "PASS",
+  "status": "PASS"
+}

@@ -10,3 +10,9 @@ work/
 # Local generated QA artifacts and export directories
 output/
 qa-output/
+
+# Reproducible release outputs stay outside source control
+build/
+dist/
+release/*.exe
+release/*.zip

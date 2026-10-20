@@ -1,8 +1,34 @@
 # 智电析电力系统运行数据分析与可视化软件 V1.0
 
-Windows 桌面软件，开发版本 **V0.9.0 综合测试与稳定性优化**。按本次确认使用 64 位 Python 3.13。
+Windows 桌面软件，版本 **V1.0.0 Windows 发行候选版**。按本次确认使用 64 位 Python 3.13。
 产品正式名称中的 V1.0 与开发版本分别管理。V0.1 的八个页面、导航、首页入口和原生窗口操作均保留。
 
+
+
+## V1.0 Windows 候选交付
+
+正式名称不变，版本号1.0.0。提供真实验证的PyInstaller onedir目录、Inno Setup当前用户安装器及完整便携ZIP，无需用户另装Python。当前没有正式Release、标签或签名；安装包、独立机器与许可验收状态必须以文档为准，不能把“版本1.0.0”理解为全部发布门槛已通过。
+
+- 普通用户：取得经审核的`SmartPowerAnalyzer-Setup-1.0.0.exe`或完整`SmartPowerAnalyzer-Portable-1.0.0.zip`，核对该份产物的SHA256SUMS.txt。目录版保留_internal后双击SmartPowerAnalyzer.exe；安装器默认仅当前用户、可选桌面图标、开始菜单与卸载。卸载不删除用户SQLite、设置和报告。
+- [操作手册](docs/USER_MANUAL_V1.0.md)含真实冻结EXE截图；[设计说明](docs/SOFTWARE_DESIGN_V1.0.md)、[测试报告](docs/TEST_REPORT_V1.0.md)、[验证记录](docs/VALIDATION_V1.0.md)记录实际结果。[软著材料](copyright/MATERIALS_CHECKLIST.md)仅为候选稿，身份、权属和日期由申请人确认。
+- 大PDF事件按256条延迟排版，完整事件不截断。十万条模拟数据单轮PDF约22.6秒、进程峰值约274MiB，仍不支持安全取消，不承诺不同机器相同性能。
+- 已验证Windows11源码与实际EXE、当前用户安装/卸载/重装；独立无Python机器、Windows10、真实系统DPI和跨机阅读器未完成。默认PDF中文引用仍需阅读器支持，用户可配置有合法嵌入许可的字体。
+- [第三方许可审查](docs/THIRD_PARTY_NOTICES.md)尚有Qt对应源码提供、用户替换/调试权利和VC再分发等正式发行阻塞项；不因开源依赖或PyPI公告未检出就声称无漏洞/已合规。
+
+### 可重复构建流程
+
+Windows x64、Python3.13，在较短目录和全新venv中执行：
+
+```powershell
+py -3.13 -m venv .venv-build
+.\.venv-build\Scripts\python.exe -m pip install pip==26.2.1
+.\.venv-build\Scripts\python.exe -m pip install -r requirements-windows-build.lock
+.\.venv-build\Scripts\python.exe -m pytest -q
+.\packaging\setup_inno.ps1 -OutputDirectory .\build\inno-tool
+.\packaging\build_windows.ps1 -Python .\.venv-build\Scripts\python.exe -Installer -Iscc .\build\inno-tool\compiler\ISCC.exe
+```
+
+构建脚本包含真实EXE运行检查，失败不继续制作安装器；ZIP校验CRC并按实际产物生成SHA256。`-DistRoot/-BuildRoot/-ReleaseRoot`可指定新的专用输出目录；不要指向个人数据，已有onedir构建目录会被替换，已有便携ZIP默认拒绝覆盖。流程可重建，不承诺二进制逐字节一致；各次构建应使用自己生成的校验值。GitHub Actions只保存候选产物，不自动创建Release/标签或合并PR。
 
 ## V0.9 质量优化
 
@@ -25,7 +51,7 @@ Windows 桌面软件，开发版本 **V0.9.0 综合测试与稳定性优化**。
 ```powershell
 git clone https://github.com/sunyiyang299-cell/SmartPowerAnalyzer.git
 cd SmartPowerAnalyzer
-git switch feature/v0.9-quality-hardening
+git switch release/v1.0-windows
 py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe main.py

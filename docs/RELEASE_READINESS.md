@@ -1,42 +1,46 @@
-# V1.0 发布准备清单
+# V1.0 发行候选验收清单
 
-状态截至V0.9本机验证；详细证据、缺陷和测试范围见 [VALIDATION_V0.9.md](VALIDATION_V0.9.md)。PASS不扩展到未列明的环境。
+验证周期2026-10-20～2026-10-21；详细实际证据见[VALIDATION_V1.0](VALIDATION_V1.0.md)和[TEST_REPORT_V1.0](TEST_REPORT_V1.0.md)。状态只覆盖列明范围，未测试不得扩展为PASS。
 
-| 检查项 | 状态 | 证据或待办 |
+| 项目 | 状态 | 证据/边界 |
 |---|---|---|
-| V0.1～V0.5源码与八页功能保留 | PASS | 以main合并PR1～5为基线，完整回归，无业务模块/测试删除 |
-| 电气计算准确性 | PASS | 旧基础算例/非法输入/极值；Decimal精度和下溢修复回归 |
-| 单相RMS模型、PF算术平均、无功绝对值说明 | PASS | 原算法和说明保留，非三相/谐波/能量计量模型 |
-| 数据完整性 | PASS | SQLite事务/重启/kill；十万条Excel逐条与37077事件核验 |
-| Windows11 Python3.13源码安装运行 | PASS | 独立新venv，非管理员，原生Qt回归 |
-| Windows10 | NOT TESTED | 需要独立实机/虚拟机 |
-| GUI常规回归、关闭/竞态保护 | PASS | 八页、实际QThread、原有后台报告任务与切换用例 |
-| 900×620及Qt缩放自动化 | PASS | QT_SCALE_FACTOR1/1.25/1.5叠加实际DPI，非人工系统设置测试 |
-| 真实系统DPI切换、多显示器、长期人工操作 | NOT TESTED | V1.0安装包阶段验证 |
-| 中文路径与显式Windows扩展长路径 | PASS | >260字符端到端；不修改系统策略 |
-| 普通Windows >260字符路径 | FAIL | 本机MAX_PATH限制，需系统策略/应用路径适配评估 |
-| 实际文件占用与目标文件只读 | PASS | CreateFileW独占及只读属性，旧文件保护 |
-| 目录ACL拒写实测 | NOT TESTED | 目前仅权限故障注入，未修改用户目录ACL |
-| 磁盘满保护 | PASS | ENOSPC注入；不是实际耗尽磁盘 |
-| 离线核心业务 | PASS | socket禁用启动及端到端，非物理断网 |
-| 真正物理断网及新机离线EXE | NOT TESTED | 打包后执行 |
-| PDF/Excel导出内容 | PASS | 真实产物重开，PDF事件全量匹配，Excel原始全量值/顺序/来源 |
-| PDF中文引用/嵌入本机渲染 | PASS | 两种模式各20页，渲染40页、FontFile2检查；缺失/缺字拒绝 |
-| 跨机器中文阅读器与Microsoft Excel实机 | NOT TESTED | 尤其默认CID字体依赖阅读器支持 |
-| 大报告资源体验 | FAIL | 10万条PDF1285页、峰值约853MiB；已提示，尚无取消/内存上限 |
-| 配置持久化与损坏/权限回退 | PASS | 原文件保护与中文错误回归 |
-| 强杀恢复 | PASS | 隔离SQLite完整性和已有报告字节断言；强杀可残留未发布临时文件 |
-| 断电与存储设备故障恢复 | NOT TESTED | 不能从kill测试推导断电耐久性 |
-| 最新依赖漏洞数据库 | NOT TESTED | pip-audit有界超时，未取得有效结果；发行前必须重查 |
-| 依赖兼容性与锁定 | PASS | requirements不变，独立环境安装与pip check通过 |
-| 完整第三方依赖/Qt/字体许可汇编 | NOT TESTED | 需按实际EXE内容整理许可及分发义务 |
-| 本次字体二进制分发 | NOT APPLICABLE | 未提交或分发字体文件；本机QA使用已有字体 |
-| 版本与正式名称 | PASS | 开发0.9.0，正式名称V1.0不变 |
-| 源码、测试、文件清单 | PASS | 新增/修改文件见验证记录，无真实数据库/报告入库 |
-| 本机自动化测试及语法 | PASS | 最终数量/时间见验证记录；不跳过失败测试 |
-| GitHub Actions | PASS | 代码提交dfe3596：PR及push CI均success；完整311项/24子测试、原生专项20项/19子测试。补充文档后的最终状态见[PR #6 Checks](https://github.com/sunyiyang299-cell/SmartPowerAnalyzer/pull/6/checks) |
-| EXE构建/干净Windows安装与卸载/升级 | NOT TESTED | 收集Qt平台/翻译/ReportLab/NumPy等资源，验证数据目录、卸载保留数据 |
-| 安装签名/防病毒/自动更新策略 | NOT TESTED | V1.0发布流程待定；不擅自添加网络更新 |
-| 使用说明书/软件著作权材料 | NOT TESTED | 待基于最终软件制作真实截图、说明书、源码材料 |
+| PR1～6基线与全部业务/历史测试保留 | PASS | main54e90b1；无模块或测试删除 |
+| 正式名称、1.0.0版本、EXE资源 | PASS | 窗口/设置/报告/EXE/安装器一致；原创可编辑SVG及多尺寸ICO |
+| 电气统计与功率模型 | PASS | 全部旧算法测试；PF算术平均、无功绝对值、极值/非法输入回归 |
+| 源码全量自动化 | PASS | offscreen321项/24子测试89.30s；Windows原生321项/24子测试94.57s，均0失败/0跳过 |
+| 编译/依赖/脚本 | PASS | compileall、pip check、git diff --check、PowerShell解析、Inno真实编译 |
+| 真实onedir EXE普通启动/关闭 | PASS | 真实可见窗口与官方标题，初始化完成后正常关闭退出0 |
+| 实际EXE业务与重启 | PASS | 隔离1000模拟记录、717事件、导入/DB/三类分析/图/PNG/PDF/XLSX/设置/重读 |
+| 运行目录与开发环境分离 | PASS（限定） | 中文复制目录、独立cwd、子PATH无Python/Git；宿主仍装Python |
+| 独立无Python干净Windows机器 | NOT TESTED | 需要独立虚拟机或电脑验收 |
+| 当前用户自选路径安装 | PASS | 真实Setup、非管理员、版本注册与开始菜单创建；不操作真实用户数据库 |
+| 开始菜单和安装目录启动 | PASS | .lnk经ShellExecuteEx与EXE普通启动实际验证 |
+| 可选桌面快捷方式 | NOT TESTED | 配置存在/编译通过，本机未选择此任务，不修改已有桌面 |
+| 卸载/重装及数据保留 | PASS | 隔离数据/设置/报告逐字节不变；重装重读、最终安装目录/QA菜单/注册项清理 |
+| 完整便携ZIP/真实SHA256 | PASS | ZIP1025条目CRC、深层解压后实际EXE全业务/重启通过；安装器/ZIP/手册/说明均按实际文件计算哈希 |
+| PDF/Excel完整记录 | PASS | 十万原始记录和37077事件；PDF1290页全事件匹配，Excel逐行核对 |
+| 大PDF资源改进 | PASS（限定） | 256事件延迟排版，单轮22.6秒/273.95MiB；未静默删事件 |
+| 大报告取消/百分比进度/长期压力 | NOT TESTED | 取消与百分比尚未实现，不以强杀替代；只有忙碌与容量提示 |
+| Windows11中文用户/文件路径 | PASS | 本机实际运行与安装 |
+| Windows10/不同账号/真实DPI切换 | NOT TESTED | Qt缩放自动化不等于真实系统DPI，未做独立账号/Windows10 |
+| 普通超长路径无条件支持 | FAIL（限制） | 明确系统与库限制；显式扩展路径回归通过，不修改用户策略 |
+| 文件占用/只读目标/磁盘满/事务/kill | PASS（限定） | 真实文件占用与只读；ENOSPC故障注入；隔离kill恢复。非实际填盘或断电 |
+| 目录ACL/断电与设备故障 | NOT TESTED | 未修改用户目录ACL，未进行断电测试 |
+| PDF字体与手册本机渲染 | PASS（限定） | 默认CID引用、用户TrueType机制保留；10页手册与实际报告渲染检查 |
+| 自带中文字体分发 | NOT APPLICABLE | 不分发第三方字体二进制；原创图标不含字体 |
+| 跨机器阅读器/真实Microsoft Excel | NOT TESTED | PDFium/pypdf/openpyxl不能替代跨机器/真实Excel验收 |
+| 离线核心业务 | PASS（限定） | 实际EXE中禁用Python socket；没有新增联网业务 |
+| 物理断网/全部原生网络流量 | NOT TESTED | 未物理断网或抓包，不声称完全独立网络审计 |
+| PyPI分发版本公告 | PASS（限定） | 29包全部查询成功，pip26.2.1后未检出；证据security-v1.0.json |
+| CPython/SQLite/Qt/系统完整安全复核 | NOT TESTED | PyPI公告范围不覆盖全部原生组件或解释器补丁 |
+| Qt/VC/全组件再分发义务 | FAIL（阻塞） | 已保留版本与原文；对应源码/用户权利/VC授权/全DLL许可仍需正式确认 |
+| 应用权属及自身对外许可 | FAIL（待申请人） | 不依据GitHub用户名推断权利人，不擅自给出应用许可证 |
+| 私人数据与敏感信息检查 | PASS（范围限定） | 只提交模拟证据、真实已遮蔽截图、源码/文档；不提交DB/日志/EXE/ZIP或令牌 |
+| 用户手册/设计/测试/验证 | PASS | 真实代码与运行截图候选材料，手册另有10页PDF |
+| 软著源码候选材料 | PASS（候选） | 60个项目Python文件/3398行，固定实际Git提交和SHA256，排除依赖源代码 |
+| 软著申请人信息/格式核对/登记结果 | NOT TESTED | 待申请人提供和确认；未执行登记、不保证通过 |
+| 代码签名/杀毒/SmartScreen | NOT TESTED | EXE/安装包未签名，尚未做相关验收 |
+| Windows CI构建/运行/安装 | NOT TESTED | 创建PR后实际等待，最终状态在PR Checks与交付报告记录，不预填通过 |
+| 自动正式Release/标签/合并 | NOT APPLICABLE | 本次禁止，未执行 |
 
-结论：具备进入V1.0打包与验证工作的基础；当前不是可直接正式发行的安装包。发行前完成FAIL和关键NOT TESTED项，人工审核后决定是否合并/发布。
+结论：源码与本机真实EXE/安装器流程已验证，**仍为发行候选包，不具备正式公开发行结论**。须完成许可/权属阻塞和独立机器等关键验收，再由用户审核是否合并及发布。

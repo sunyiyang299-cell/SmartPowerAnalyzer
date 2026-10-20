@@ -1,0 +1,106 @@
+{
+  "scope": "One post-change run; concurrent build and QA; cumulative process peak, not per-task increment",
+  "measurements": [
+    {
+      "count": 100000,
+      "iteration": 0,
+      "task": "import_csv",
+      "seconds": 0.4319,
+      "cpu_seconds": 0.4219,
+      "process_peak_mib": 206.07,
+      "heartbeat_count": 36,
+      "max_heartbeat_gap_seconds": 0.0597
+    },
+    {
+      "count": 100000,
+      "iteration": 0,
+      "task": "sqlite_save",
+      "seconds": 0.7488,
+      "cpu_seconds": 0.6875,
+      "process_peak_mib": 206.07,
+      "heartbeat_count": 71,
+      "max_heartbeat_gap_seconds": 0.0428
+    },
+    {
+      "count": 100000,
+      "iteration": 0,
+      "task": "sqlite_load",
+      "seconds": 0.3792,
+      "cpu_seconds": 0.375,
+      "process_peak_mib": 214.24,
+      "heartbeat_count": 32,
+      "max_heartbeat_gap_seconds": 0.0504
+    },
+    {
+      "count": 100000,
+      "iteration": 0,
+      "task": "analysis",
+      "seconds": 0.2739,
+      "cpu_seconds": 0.2656,
+      "process_peak_mib": 214.24,
+      "heartbeat_count": 26,
+      "max_heartbeat_gap_seconds": 0.0337
+    },
+    {
+      "count": 100000,
+      "iteration": 0,
+      "task": "anomaly",
+      "seconds": 0.3854,
+      "cpu_seconds": 0.3906,
+      "process_peak_mib": 214.24,
+      "heartbeat_count": 30,
+      "max_heartbeat_gap_seconds": 0.0547
+    },
+    {
+      "count": 100000,
+      "iteration": 0,
+      "task": "plot_and_png",
+      "seconds": 0.1758,
+      "cpu_seconds": 0.1875,
+      "process_peak_mib": 218.33,
+      "heartbeat_count": 3,
+      "max_heartbeat_gap_seconds": 0.1038
+    },
+    {
+      "count": 100000,
+      "iteration": 0,
+      "task": "report_snapshot",
+      "seconds": 1.4091,
+      "cpu_seconds": 1.4062,
+      "process_peak_mib": 252.13,
+      "heartbeat_count": 116,
+      "max_heartbeat_gap_seconds": 0.055
+    },
+    {
+      "count": 100000,
+      "iteration": 0,
+      "task": "pdf",
+      "seconds": 22.5747,
+      "cpu_seconds": 21.9531,
+      "process_peak_mib": 273.95,
+      "heartbeat_count": 2185,
+      "max_heartbeat_gap_seconds": 0.0984
+    },
+    {
+      "count": 100000,
+      "iteration": 0,
+      "task": "xlsx",
+      "seconds": 93.2347,
+      "cpu_seconds": 92.0469,
+      "process_peak_mib": 508.46,
+      "heartbeat_count": 9186,
+      "max_heartbeat_gap_seconds": 0.4919
+    },
+    {
+      "count": 100000,
+      "iteration": 0,
+      "events": 37077,
+      "unique_samples": 33700,
+      "bytes": {
+        ".png": 140900,
+        ".pdf": 3938604,
+        ".xlsx": 17048058
+      }
+    }
+  ]
+}

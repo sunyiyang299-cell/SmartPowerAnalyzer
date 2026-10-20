@@ -1,0 +1,25 @@
+{
+  "zip_entries": 1025,
+  "files": [
+    {
+      "file": "RELEASE_NOTES_V1.0.md",
+      "bytes": 2938,
+      "sha256": "1631fcef547d18a47d43459e10d4bdd55def6c71355289642baec6ebb419076d"
+    },
+    {
+      "file": "SmartPowerAnalyzer-Portable-1.0.0.zip",
+      "bytes": 72406312,
+      "sha256": "dd83f8294a015d2a6e03b277b0037f7bf11b2b835e12b7a7f1628d9aca3eda83"
+    },
+    {
+      "file": "SmartPowerAnalyzer-Setup-1.0.0.exe",
+      "bytes": 51090479,
+      "sha256": "a929e4e5e6b5d3aaf96cf1b583e1ddc3d359e9be36d16c013adcb80fd98f1943"
+    },
+    {
+      "file": "USER_MANUAL_V1.0.pdf",
+      "bytes": 959470,
+      "sha256": "8fd1822815837b18eb7677dff9fba9089ab44505854ae4aed3ed84663ed4b287"
+    }
+  ]
+}

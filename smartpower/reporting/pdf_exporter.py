@@ -5,7 +5,7 @@ from xml.sax.saxutils import escape
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
-from reportlab.platypus import LongTable, PageBreak, Paragraph, SimpleDocTemplate, Spacer, TableStyle
+from reportlab.platypus import Flowable, LongTable, PageBreak, Paragraph, SimpleDocTemplate, Spacer, TableStyle
 
 from smartpower.analysis.power import POWER_MODEL
 from smartpower.anomaly.models import DISCLAIMER
@@ -13,6 +13,38 @@ from smartpower.reporting.chart_renderer import render_chart
 from smartpower.reporting.files import atomic_report
 from smartpower.reporting.fonts import FONT_LOCK, ensure_glyphs, report_font
 from smartpower.reporting.models import LIMITATIONS, statistics_rows
+
+
+class DeferredEventTable(Flowable):
+    """Materialize at most one bounded event batch when Platypus reaches it."""
+    BATCH_SIZE = 256
+
+    def __init__(self, events, start, stop, make_table):
+        super().__init__()
+        self.events, self.start, self.stop = events, start, stop
+        self.make_table = make_table
+        self._table = None
+
+    def rows(self):
+        yield ("原始索引", "采样时间", "异常类型", "采样值", "用户阈值", "单位")
+        for index in range(self.start, self.stop):
+            e = self.events[index]
+            yield (e.row_index, str(e.timestamp).replace("T", " "), e.kind,
+                   f"{e.value:.12g}", f"{e.threshold:.12g}", e.unit)
+
+    def _materialize(self):
+        if self._table is None:
+            self._table = self.make_table(list(self.rows()), [48, 151, 72, 82, 82, 60])
+        return self._table
+
+    def wrap(self, width, height):
+        return self._materialize().wrapOn(self.canv, width, height)
+
+    def split(self, width, height):
+        return self._materialize().splitOn(self.canv, width, height)
+
+    def draw(self):
+        self._materialize().drawOn(self.canv, 0, 0)
 
 
 def export_pdf(snapshot, path, *, overwrite=False, font_path=""):
@@ -73,10 +105,10 @@ def export_pdf(snapshot, path, *, overwrite=False, font_path=""):
             story.append(table([("统计项目", "次数 / 数量"), ("异常事件总数", len(d.events)),
                                 ("唯一异常采样点", d.unique_sample_count), *d.type_counts.items()], [250, 245]))
             if d.events:
-                story += [Spacer(1, 15), paragraph("全部异常明细（原始索引从 0 起）"), table(
-                    [("原始索引", "采样时间", "异常类型", "采样值", "用户阈值", "单位")] +
-                    [(e.row_index, str(e.timestamp).replace("T", " "), e.kind, f"{e.value:.12g}", f"{e.threshold:.12g}", e.unit)
-                     for e in d.events], [48, 151, 72, 82, 82, 60])]
+                story += [Spacer(1, 15), paragraph("全部异常明细（原始索引从 0 起）")]
+                for start in range(0, len(d.events), DeferredEventTable.BATCH_SIZE):
+                    story.append(DeferredEventTable(d.events, start,
+                                 min(start + DeferredEventTable.BATCH_SIZE, len(d.events)), table))
         story += [PageBreak(), paragraph("六、说明与限制", heading)]
         story.extend(paragraph(f"{j + 1}. {text}") for j, text in enumerate(LIMITATIONS))
         story.append(paragraph("中文字体：" + ("用户配置的嵌入式 TrueType 字体。" if font_path else
@@ -85,6 +117,9 @@ def export_pdf(snapshot, path, *, overwrite=False, font_path=""):
         def texts(item):
             if isinstance(item, Paragraph):
                 yield item.getPlainText()
+            elif isinstance(item, DeferredEventTable):
+                for row in item.rows():
+                    yield from (str(value) for value in row)
             elif isinstance(item, LongTable):
                 for row in item._cellvalues:
                     for cell in row:
@@ -95,7 +130,12 @@ def export_pdf(snapshot, path, *, overwrite=False, font_path=""):
             elif hasattr(item, "text"):
                 yield item.text
 
-        ensure_glyphs(font, "".join(text for item in story for text in texts(item)) + "第页智电析运行数据分析")
+        # Glyph coverage needs distinct characters, not a giant copy of all text.
+        characters = set("第页智电析运行数据分析")
+        for item in story:
+            for text in texts(item):
+                characters.update(text)
+        ensure_glyphs(font, "".join(characters))
 
         def footer(canvas, document):
             canvas.saveState()
