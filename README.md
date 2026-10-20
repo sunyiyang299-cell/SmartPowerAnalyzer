@@ -1,7 +1,22 @@
 # 智电析电力系统运行数据分析与可视化软件 V1.0
 
-Windows 桌面软件，开发版本 **V0.5.0 专业分析报告与系统设置**。按本次确认使用 64 位 Python 3.13。
+Windows 桌面软件，开发版本 **V0.9.0 综合测试与稳定性优化**。按本次确认使用 64 位 Python 3.13。
 产品正式名称中的 V1.0 与开发版本分别管理。V0.1 的八个页面、导航、首页入口和原生窗口操作均保留。
+
+
+## V0.9 质量优化
+
+保留 V0.1～V0.5 八页导航、数据管理、统计分析、异常检测、曲线、PDF/Excel 和设置功能。本版修复相邻浮点采样标准差精度、非零功率下溢被当作零、设置文件读取权限错误及模拟 CSV 未经确认覆盖问题；不新增测量数据或分析模型。
+
+- 总体标准差仍为 `sqrt(mean((x-mean(x))²))`，`ddof=0`。实现先减最小值再按极差归一化，以保留相邻 float64 差值并避免平方溢出。
+- 非零功率结果舍入成零时明确报错；真实零输入、PF=0/1 的零分量仍有效。单相正弦稳态公式、单位和无功绝对值含义不变。
+- 模拟 CSV 导出默认拒绝覆盖，界面只确认一次，CLI 需 `--overwrite`；并发出现同名文件时也不会静默覆盖。Python API 若确认覆盖需 `export_demo(dataset, path, overwrite=True)`。
+- 核心业务离线 socket 禁用测试、隔离数据库异常终止恢复、原生 Windows Qt 与缩放测试、完整导出核验已加入质量验证。全新 Python 3.13 虚拟环境实际安装并验证。
+- 大量异常的完整 PDF 可能耗时并占用较多内存；不会截断事件，当前没有取消功能。十万条模拟数据的完整 PDF 有 1,285 页；请按机器容量选择数据量，逐条筛选可用 Excel。
+
+详细实测、三轮性能数据与限制见 [V0.9 验证记录](docs/VALIDATION_V0.9.md)、[发布准备清单](docs/RELEASE_READINESS.md)。V0.9 是发布前质量版本，尚未完成 EXE、Windows 10、真实系统 DPI 切换、多机器阅读器及最新漏洞数据库审计。
+
+本机普通 Windows 路径超过 260 字符受系统策略限制，扩展路径 `\\?\` 模式已实测；普通长路径尚不保证。目录不可写或被占用时应更换路径，已有文件保持不变。
 
 ## 安装与运行
 
@@ -10,7 +25,7 @@ Windows 桌面软件，开发版本 **V0.5.0 专业分析报告与系统设置**
 ```powershell
 git clone https://github.com/sunyiyang299-cell/SmartPowerAnalyzer.git
 cd SmartPowerAnalyzer
-git switch feature/v0.5-reports-settings
+git switch feature/v0.9-quality-hardening
 py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe main.py

@@ -35,7 +35,7 @@ def test_export_failure_preserves_existing_file(tmp_path, monkeypatch):
         raise PermissionError("测试拒绝替换")
     monkeypatch.setattr("smartpower.data.demo.os.replace", fail)
     with pytest.raises(DataError, match="导出失败"):
-        export_demo(generate_demo(), path)
+        export_demo(generate_demo(), path, overwrite=True)
     assert path.read_text(encoding="utf-8") == "原内容"
     assert not list(tmp_path.glob("*.tmp"))
 

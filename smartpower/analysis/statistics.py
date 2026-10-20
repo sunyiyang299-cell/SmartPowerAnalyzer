@@ -53,15 +53,17 @@ def summarize(values, quantity: str, unit: str, upper: float | None = None) -> S
     samples = numeric_samples(values, quantity, upper)
     maximum = float(np.max(samples))
     minimum = float(np.min(samples))
-    # Scaling keeps both the sum in mean and the squared deviations in std
-    # finite for very large, otherwise valid nonnegative float64 samples.
-    if maximum == 0:
-        mean = deviation = 0.0
+    # Subtract before scaling: dividing close large samples by their maximum
+    # destroys representable differences. Nonnegative inputs make the range
+    # finite; scaling that range also avoids overflow in squared deviations.
+    spread = maximum - minimum
+    if spread == 0:
+        mean, deviation = minimum, 0.0
     else:
         with np.errstate(over="raise", invalid="raise", under="ignore"):
-            normalized = samples / maximum
-            mean = float(np.mean(normalized, dtype=np.float64) * maximum)
-            deviation = float(np.std(normalized, dtype=np.float64, ddof=0) * maximum)
+            normalized = (samples - minimum) / spread
+            mean = float(minimum + np.mean(normalized, dtype=np.float64) * spread)
+            deviation = float(np.std(normalized, dtype=np.float64, ddof=0) * spread)
     if not np.isfinite([mean, deviation]).all():
         raise AnalysisError(f"{quantity}统计结果超出 float64 数值范围。")
     return Statistics(quantity, unit, int(samples.size), mean, maximum, minimum, deviation)

@@ -22,9 +22,9 @@ class SettingsManager:
         self.defaults = AppSettings(str(Path(default_directory).resolve()), str(Path(default_directory).resolve()))
 
     def load(self):
-        if not self.path.exists():
-            return LoadedSettings(self.defaults)
         try:
+            if not self.path.exists():
+                return LoadedSettings(self.defaults)
             if self.path.stat().st_size > 65536:
                 raise ValueError("设置文件异常过大")
             data = json.loads(self.path.read_text(encoding="utf-8"))

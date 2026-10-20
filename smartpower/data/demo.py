@@ -24,8 +24,8 @@ def generate_demo(count: int = 1000, seed: int | None = 42) -> Dataset:
     return Dataset("单相交流演示（模拟数据）", validate_frame(frame), simulated=True)
 
 
-def export_demo(dataset: Dataset, path: str | Path) -> None:
-    """Atomic replacement prevents a failed export from truncating an old file."""
+def export_demo(dataset: Dataset, path: str | Path, *, overwrite: bool = False) -> None:
+    """Publish atomically; existing files require explicit overwrite consent."""
     if not dataset.simulated:
         raise DataError("此入口仅允许导出明确标记的模拟数据。")
     path = Path(path)
@@ -33,10 +33,18 @@ def export_demo(dataset: Dataset, path: str | Path) -> None:
     frame[SOURCE_COLUMN] = SIMULATED_SOURCE
     temporary = None
     try:
+        if path.exists() and not overwrite:
+            raise DataError("目标文件已存在，请确认覆盖后重试。")
         with tempfile.NamedTemporaryFile(dir=path.parent, suffix=".tmp", delete=False) as handle:
             temporary = Path(handle.name)
         frame.to_csv(temporary, index=False, encoding="utf-8-sig")
-        os.replace(temporary, path)
+        if overwrite:
+            os.replace(temporary, path)
+        elif os.name == "nt":
+            os.rename(temporary, path)  # Windows refuses an existing destination.
+        else:
+            os.link(temporary, path)  # Exclusive publication also closes races.
+            temporary.unlink()
     except OSError as exc:
         raise DataError(f"导出失败：{exc}。原目标文件未被替换，请检查路径、权限或磁盘空间。") from exc
     finally:
@@ -59,7 +67,7 @@ def main() -> None:
     if args.output.exists() and not args.overwrite:
         parser.error("目标文件已存在。如需覆盖，请明确添加 --overwrite。")
     try:
-        export_demo(generate_demo(), args.output)
+        export_demo(generate_demo(), args.output, overwrite=args.overwrite)
     except DataError as exc:
         parser.error(str(exc))
     print(f"已导出 1000 条模拟数据（非真实设备测量）：{args.output}")

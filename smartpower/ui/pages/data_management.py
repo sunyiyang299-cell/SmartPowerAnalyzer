@@ -1,5 +1,7 @@
 """Data-management UI orchestration. All expensive work runs in TaskThread."""
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QTextOption
 from PySide6.QtWidgets import (
@@ -300,6 +302,7 @@ class DataManagementPage(BasePage):
         dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
         dialog.setNameFilter("CSV 文件 (*.csv)")
         dialog.setDefaultSuffix("csv")
+        dialog.setOption(QFileDialog.Option.DontConfirmOverwrite, True)
         dialog.selectFile("模拟数据.csv")
         if dialog.exec():
             self.export_to(dialog.selectedFiles()[0])
@@ -308,7 +311,14 @@ class DataManagementPage(BasePage):
         if self.busy or self.dataset is None:
             return
         dataset = self.dataset
-        self._start(lambda: export_demo(dataset, path),
+        try:
+            overwrite = Path(path).exists()
+        except OSError as exc:
+            self.notify(f"无法检查导出路径：{exc}。请检查路径与权限。")
+            return
+        if overwrite and not self._confirm("覆盖文件", "目标文件已存在，确认替换？", "确认覆盖"):
+            return
+        self._start(lambda: export_demo(dataset, path, overwrite=overwrite),
                     lambda _: self.notify("模拟数据 CSV 已导出，文件内含模拟来源标记。"), "正在导出全部模拟数据…")
 
     def _sort(self, column, ascending):

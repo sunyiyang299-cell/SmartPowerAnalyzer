@@ -39,6 +39,12 @@ def analyze_power(voltage, current, power_factor) -> PowerAnalysis:
         raise AnalysisError("功率结果超出 float64 可表示范围，请检查单位与输入数量级。") from exc
     if not all(np.isfinite(a).all() for a in (active, apparent, reactive)):
         raise AnalysisError("功率结果包含非有限值，已拒绝本次计算。")
+    # A positive physical result rounded down to zero is unrepresentable,
+    # not a zero-load measurement. Exact zeros (U/I=0, PF=0 or PF=1) remain valid.
+    if (np.any((u > 0) & (i > 0) & (apparent == 0))
+            or np.any((apparent > 0) & (pf > 0) & (active == 0))
+            or np.any((apparent > 0) & (pf < 1) & (reactive == 0))):
+        raise AnalysisError("非零功率结果小于 float64 可表示范围，已拒绝将其当作零值输出。")
     active_stats = summarize(active, "有功功率", "W")
     apparent_stats = summarize(apparent, "视在功率", "VA")
     reactive_stats = summarize(reactive, "无功功率绝对值 |Q|", "var")

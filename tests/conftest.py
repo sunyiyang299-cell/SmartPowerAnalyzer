@@ -10,3 +10,5 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 def isolated_user_settings(tmp_path, monkeypatch):
     """Never read or overwrite the developer's persisted personal preferences."""
     monkeypatch.setenv("SMARTPOWER_SETTINGS_PATH", str(tmp_path / "user-settings.json"))
+
+    monkeypatch.setenv("SMARTPOWER_DB_PATH", str(tmp_path / "isolated.sqlite3"))

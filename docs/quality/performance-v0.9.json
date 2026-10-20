@@ -1,0 +1,921 @@
+{
+  "python": "3.13.0 64-bit",
+  "os": "Windows 11 build 26200",
+  "cpu": "AMD64 Family 25 Model 97 Stepping 2",
+  "admin": false,
+  "data": "seed=42, simulated only; thresholds U<220,U>240,I>20",
+  "repetitions": 3,
+  "peak_memory": "Cumulative process peak working set (not incremental per task)",
+  "timing_scope": "Wall + process CPU; concurrent QA tasks may influence timings; GUI plot/PNG occurs on GUI thread",
+  "measurements": [
+    {
+      "count": 1000,
+      "iteration": 0,
+      "task": "import_csv",
+      "seconds": 0.0194,
+      "cpu_seconds": 0.0,
+      "process_peak_mib": 164.51,
+      "heartbeat_count": 2,
+      "max_heartbeat_gap_seconds": 0.0193
+    },
+    {
+      "count": 1000,
+      "iteration": 0,
+      "task": "sqlite_save",
+      "seconds": 0.0632,
+      "cpu_seconds": 0.0469,
+      "process_peak_mib": 164.51,
+      "heartbeat_count": 7,
+      "max_heartbeat_gap_seconds": 0.0107
+    },
+    {
+      "count": 1000,
+      "iteration": 0,
+      "task": "sqlite_load",
+      "seconds": 0.0162,
+      "cpu_seconds": 0.0156,
+      "process_peak_mib": 164.51,
+      "heartbeat_count": 2,
+      "max_heartbeat_gap_seconds": 0.0097
+    },
+    {
+      "count": 1000,
+      "iteration": 0,
+      "task": "analysis",
+      "seconds": 0.0089,
+      "cpu_seconds": 0.0156,
+      "process_peak_mib": 164.51,
+      "heartbeat_count": 2,
+      "max_heartbeat_gap_seconds": 0.0071
+    },
+    {
+      "count": 1000,
+      "iteration": 0,
+      "task": "anomaly",
+      "seconds": 0.0073,
+      "cpu_seconds": 0.0,
+      "process_peak_mib": 164.51,
+      "heartbeat_count": 2,
+      "max_heartbeat_gap_seconds": 0.0044
+    },
+    {
+      "count": 1000,
+      "iteration": 0,
+      "task": "plot_and_png",
+      "seconds": 0.0849,
+      "cpu_seconds": 0.1562,
+      "process_peak_mib": 187.35,
+      "heartbeat_count": 2,
+      "max_heartbeat_gap_seconds": 0.0677
+    },
+    {
+      "count": 1000,
+      "iteration": 0,
+      "task": "report_snapshot",
+      "seconds": 0.0309,
+      "cpu_seconds": 0.0312,
+      "process_peak_mib": 187.45,
+      "heartbeat_count": 4,
+      "max_heartbeat_gap_seconds": 0.0122
+    },
+    {
+      "count": 1000,
+      "iteration": 0,
+      "task": "pdf",
+      "seconds": 0.2647,
+      "cpu_seconds": 0.2656,
+      "process_peak_mib": 187.79,
+      "heartbeat_count": 21,
+      "max_heartbeat_gap_seconds": 0.0306
+    },
+    {
+      "count": 1000,
+      "iteration": 0,
+      "task": "xlsx",
+      "seconds": 0.9528,
+      "cpu_seconds": 0.8906,
+      "process_peak_mib": 187.87,
+      "heartbeat_count": 88,
+      "max_heartbeat_gap_seconds": 0.021
+    },
+    {
+      "count": 1000,
+      "iteration": 0,
+      "events": 378,
+      "unique_samples": 341,
+      "bytes": {
+        ".png": 101843,
+        ".pdf": 104891,
+        ".xlsx": 184241
+      }
+    },
+    {
+      "count": 1000,
+      "iteration": 1,
+      "task": "import_csv",
+      "seconds": 0.0185,
+      "cpu_seconds": 0.0,
+      "process_peak_mib": 188.95,
+      "heartbeat_count": 2,
+      "max_heartbeat_gap_seconds": 0.0169
+    },
+    {
+      "count": 1000,
+      "iteration": 1,
+      "task": "sqlite_save",
+      "seconds": 0.0632,
+      "cpu_seconds": 0.0312,
+      "process_peak_mib": 188.95,
+      "heartbeat_count": 6,
+      "max_heartbeat_gap_seconds": 0.0171
+    },
+    {
+      "count": 1000,
+      "iteration": 1,
+      "task": "sqlite_load",
+      "seconds": 0.0126,
+      "cpu_seconds": 0.0156,
+      "process_peak_mib": 188.95,
+      "heartbeat_count": 2,
+      "max_heartbeat_gap_seconds": 0.0088
+    },
+    {
+      "count": 1000,
+      "iteration": 1,
+      "task": "analysis",
+      "seconds": 0.0076,
+      "cpu_seconds": 0.0156,
+      "process_peak_mib": 188.95,
+      "heartbeat_count": 1,
+      "max_heartbeat_gap_seconds": 0.0076
+    },
+    {
+      "count": 1000,
+      "iteration": 1,
+      "task": "anomaly",
+      "seconds": 0.0065,
+      "cpu_seconds": 0.0,
+      "process_peak_mib": 188.95,
+      "heartbeat_count": 1,
+      "max_heartbeat_gap_seconds": 0.0065
+    },
+    {
+      "count": 1000,
+      "iteration": 1,
+      "task": "plot_and_png",
+      "seconds": 0.0855,
+      "cpu_seconds": 0.1094,
+      "process_peak_mib": 194.14,
+      "heartbeat_count": 3,
+      "max_heartbeat_gap_seconds": 0.0581
+    },
+    {
+      "count": 1000,
+      "iteration": 1,
+      "task": "report_snapshot",
+      "seconds": 0.0452,
+      "cpu_seconds": 0.0625,
+      "process_peak_mib": 194.2,
+      "heartbeat_count": 5,
+      "max_heartbeat_gap_seconds": 0.0161
+    },
+    {
+      "count": 1000,
+      "iteration": 1,
+      "task": "pdf",
+      "seconds": 0.2851,
+      "cpu_seconds": 0.2812,
+      "process_peak_mib": 194.2,
+      "heartbeat_count": 26,
+      "max_heartbeat_gap_seconds": 0.0445
+    },
+    {
+      "count": 1000,
+      "iteration": 1,
+      "task": "xlsx",
+      "seconds": 0.9821,
+      "cpu_seconds": 0.9375,
+      "process_peak_mib": 194.2,
+      "heartbeat_count": 89,
+      "max_heartbeat_gap_seconds": 0.0206
+    },
+    {
+      "count": 1000,
+      "iteration": 1,
+      "events": 378,
+      "unique_samples": 341,
+      "bytes": {
+        ".png": 101843,
+        ".pdf": 104886,
+        ".xlsx": 184241
+      }
+    },
+    {
+      "count": 1000,
+      "iteration": 2,
+      "task": "import_csv",
+      "seconds": 0.0207,
+      "cpu_seconds": 0.0156,
+      "process_peak_mib": 194.2,
+      "heartbeat_count": 3,
+      "max_heartbeat_gap_seconds": 0.0104
+    },
+    {
+      "count": 1000,
+      "iteration": 2,
+      "task": "sqlite_save",
+      "seconds": 0.0613,
+      "cpu_seconds": 0.0312,
+      "process_peak_mib": 194.2,
+      "heartbeat_count": 6,
+      "max_heartbeat_gap_seconds": 0.0147
+    },
+    {
+      "count": 1000,
+      "iteration": 2,
+      "task": "sqlite_load",
+      "seconds": 0.0127,
+      "cpu_seconds": 0.0156,
+      "process_peak_mib": 194.2,
+      "heartbeat_count": 2,
+      "max_heartbeat_gap_seconds": 0.0089
+    },
+    {
+      "count": 1000,
+      "iteration": 2,
+      "task": "analysis",
+      "seconds": 0.0097,
+      "cpu_seconds": 0.0156,
+      "process_peak_mib": 194.2,
+      "heartbeat_count": 2,
+      "max_heartbeat_gap_seconds": 0.0087
+    },
+    {
+      "count": 1000,
+      "iteration": 2,
+      "task": "anomaly",
+      "seconds": 0.0092,
+      "cpu_seconds": 0.0,
+      "process_peak_mib": 194.2,
+      "heartbeat_count": 2,
+      "max_heartbeat_gap_seconds": 0.0074
+    },
+    {
+      "count": 1000,
+      "iteration": 2,
+      "task": "plot_and_png",
+      "seconds": 0.0665,
+      "cpu_seconds": 0.0625,
+      "process_peak_mib": 194.81,
+      "heartbeat_count": 2,
+      "max_heartbeat_gap_seconds": 0.0509
+    },
+    {
+      "count": 1000,
+      "iteration": 2,
+      "task": "report_snapshot",
+      "seconds": 0.0303,
+      "cpu_seconds": 0.0312,
+      "process_peak_mib": 194.87,
+      "heartbeat_count": 3,
+      "max_heartbeat_gap_seconds": 0.0114
+    },
+    {
+      "count": 1000,
+      "iteration": 2,
+      "task": "pdf",
+      "seconds": 0.2792,
+      "cpu_seconds": 0.2812,
+      "process_peak_mib": 194.87,
+      "heartbeat_count": 21,
+      "max_heartbeat_gap_seconds": 0.0369
+    },
+    {
+      "count": 1000,
+      "iteration": 2,
+      "task": "xlsx",
+      "seconds": 1.0699,
+      "cpu_seconds": 1.0625,
+      "process_peak_mib": 194.87,
+      "heartbeat_count": 99,
+      "max_heartbeat_gap_seconds": 0.0215
+    },
+    {
+      "count": 1000,
+      "iteration": 2,
+      "events": 378,
+      "unique_samples": 341,
+      "bytes": {
+        ".png": 101843,
+        ".pdf": 104886,
+        ".xlsx": 184242
+      }
+    },
+    {
+      "count": 10000,
+      "iteration": 0,
+      "task": "import_csv",
+      "seconds": 0.0676,
+      "cpu_seconds": 0.0469,
+      "process_peak_mib": 178.98,
+      "heartbeat_count": 7,
+      "max_heartbeat_gap_seconds": 0.0177
+    },
+    {
+      "count": 10000,
+      "iteration": 0,
+      "task": "sqlite_save",
+      "seconds": 0.1321,
+      "cpu_seconds": 0.0938,
+      "process_peak_mib": 178.98,
+      "heartbeat_count": 14,
+      "max_heartbeat_gap_seconds": 0.0207
+    },
+    {
+      "count": 10000,
+      "iteration": 0,
+      "task": "sqlite_load",
+      "seconds": 0.0424,
+      "cpu_seconds": 0.0312,
+      "process_peak_mib": 178.98,
+      "heartbeat_count": 4,
+      "max_heartbeat_gap_seconds": 0.0211
+    },
+    {
+      "count": 10000,
+      "iteration": 0,
+      "task": "analysis",
+      "seconds": 0.0375,
+      "cpu_seconds": 0.0469,
+      "process_peak_mib": 178.98,
+      "heartbeat_count": 4,
+      "max_heartbeat_gap_seconds": 0.018
+    },
+    {
+      "count": 10000,
+      "iteration": 0,
+      "task": "anomaly",
+      "seconds": 0.0484,
+      "cpu_seconds": 0.0469,
+      "process_peak_mib": 178.98,
+      "heartbeat_count": 5,
+      "max_heartbeat_gap_seconds": 0.0173
+    },
+    {
+      "count": 10000,
+      "iteration": 0,
+      "task": "plot_and_png",
+      "seconds": 0.1201,
+      "cpu_seconds": 0.125,
+      "process_peak_mib": 192.86,
+      "heartbeat_count": 3,
+      "max_heartbeat_gap_seconds": 0.0733
+    },
+    {
+      "count": 10000,
+      "iteration": 0,
+      "task": "report_snapshot",
+      "seconds": 0.1746,
+      "cpu_seconds": 0.2031,
+      "process_peak_mib": 192.93,
+      "heartbeat_count": 16,
+      "max_heartbeat_gap_seconds": 0.0226
+    },
+    {
+      "count": 10000,
+      "iteration": 0,
+      "task": "pdf",
+      "seconds": 3.2176,
+      "cpu_seconds": 3.1719,
+      "process_peak_mib": 248.27,
+      "heartbeat_count": 277,
+      "max_heartbeat_gap_seconds": 0.1191
+    },
+    {
+      "count": 10000,
+      "iteration": 0,
+      "task": "xlsx",
+      "seconds": 9.6709,
+      "cpu_seconds": 9.6094,
+      "process_peak_mib": 248.27,
+      "heartbeat_count": 849,
+      "max_heartbeat_gap_seconds": 0.027
+    },
+    {
+      "count": 10000,
+      "iteration": 0,
+      "events": 3690,
+      "unique_samples": 3353,
+      "bytes": {
+        ".png": 151844,
+        ".pdf": 487398,
+        ".xlsx": 1713324
+      }
+    },
+    {
+      "count": 10000,
+      "iteration": 1,
+      "task": "import_csv",
+      "seconds": 0.0515,
+      "cpu_seconds": 0.0312,
+      "process_peak_mib": 250.95,
+      "heartbeat_count": 6,
+      "max_heartbeat_gap_seconds": 0.016
+    },
+    {
+      "count": 10000,
+      "iteration": 1,
+      "task": "sqlite_save",
+      "seconds": 0.1037,
+      "cpu_seconds": 0.0312,
+      "process_peak_mib": 250.95,
+      "heartbeat_count": 11,
+      "max_heartbeat_gap_seconds": 0.0123
+    },
+    {
+      "count": 10000,
+      "iteration": 1,
+      "task": "sqlite_load",
+      "seconds": 0.0379,
+      "cpu_seconds": 0.0469,
+      "process_peak_mib": 250.95,
+      "heartbeat_count": 4,
+      "max_heartbeat_gap_seconds": 0.0138
+    },
+    {
+      "count": 10000,
+      "iteration": 1,
+      "task": "analysis",
+      "seconds": 0.0271,
+      "cpu_seconds": 0.0156,
+      "process_peak_mib": 250.95,
+      "heartbeat_count": 3,
+      "max_heartbeat_gap_seconds": 0.0123
+    },
+    {
+      "count": 10000,
+      "iteration": 1,
+      "task": "anomaly",
+      "seconds": 0.0334,
+      "cpu_seconds": 0.0312,
+      "process_peak_mib": 250.95,
+      "heartbeat_count": 4,
+      "max_heartbeat_gap_seconds": 0.0125
+    },
+    {
+      "count": 10000,
+      "iteration": 1,
+      "task": "plot_and_png",
+      "seconds": 0.1198,
+      "cpu_seconds": 0.125,
+      "process_peak_mib": 250.95,
+      "heartbeat_count": 3,
+      "max_heartbeat_gap_seconds": 0.0693
+    },
+    {
+      "count": 10000,
+      "iteration": 1,
+      "task": "report_snapshot",
+      "seconds": 0.1178,
+      "cpu_seconds": 0.1094,
+      "process_peak_mib": 250.95,
+      "heartbeat_count": 12,
+      "max_heartbeat_gap_seconds": 0.0156
+    },
+    {
+      "count": 10000,
+      "iteration": 1,
+      "task": "pdf",
+      "seconds": 3.0145,
+      "cpu_seconds": 2.9844,
+      "process_peak_mib": 253.95,
+      "heartbeat_count": 251,
+      "max_heartbeat_gap_seconds": 0.2058
+    },
+    {
+      "count": 10000,
+      "iteration": 1,
+      "task": "xlsx",
+      "seconds": 10.1542,
+      "cpu_seconds": 10.3125,
+      "process_peak_mib": 253.95,
+      "heartbeat_count": 850,
+      "max_heartbeat_gap_seconds": 0.0308
+    },
+    {
+      "count": 10000,
+      "iteration": 1,
+      "events": 3690,
+      "unique_samples": 3353,
+      "bytes": {
+        ".png": 151844,
+        ".pdf": 487430,
+        ".xlsx": 1713325
+      }
+    },
+    {
+      "count": 10000,
+      "iteration": 2,
+      "task": "import_csv",
+      "seconds": 0.0645,
+      "cpu_seconds": 0.0469,
+      "process_peak_mib": 256.05,
+      "heartbeat_count": 7,
+      "max_heartbeat_gap_seconds": 0.0121
+    },
+    {
+      "count": 10000,
+      "iteration": 2,
+      "task": "sqlite_save",
+      "seconds": 0.1352,
+      "cpu_seconds": 0.125,
+      "process_peak_mib": 256.05,
+      "heartbeat_count": 13,
+      "max_heartbeat_gap_seconds": 0.019
+    },
+    {
+      "count": 10000,
+      "iteration": 2,
+      "task": "sqlite_load",
+      "seconds": 0.0562,
+      "cpu_seconds": 0.0625,
+      "process_peak_mib": 256.05,
+      "heartbeat_count": 6,
+      "max_heartbeat_gap_seconds": 0.0194
+    },
+    {
+      "count": 10000,
+      "iteration": 2,
+      "task": "analysis",
+      "seconds": 0.038,
+      "cpu_seconds": 0.0312,
+      "process_peak_mib": 256.05,
+      "heartbeat_count": 4,
+      "max_heartbeat_gap_seconds": 0.0172
+    },
+    {
+      "count": 10000,
+      "iteration": 2,
+      "task": "anomaly",
+      "seconds": 0.0538,
+      "cpu_seconds": 0.0469,
+      "process_peak_mib": 256.05,
+      "heartbeat_count": 5,
+      "max_heartbeat_gap_seconds": 0.0208
+    },
+    {
+      "count": 10000,
+      "iteration": 2,
+      "task": "plot_and_png",
+      "seconds": 0.1149,
+      "cpu_seconds": 0.1094,
+      "process_peak_mib": 256.05,
+      "heartbeat_count": 2,
+      "max_heartbeat_gap_seconds": 0.0828
+    },
+    {
+      "count": 10000,
+      "iteration": 2,
+      "task": "report_snapshot",
+      "seconds": 0.1501,
+      "cpu_seconds": 0.1406,
+      "process_peak_mib": 256.05,
+      "heartbeat_count": 13,
+      "max_heartbeat_gap_seconds": 0.0189
+    },
+    {
+      "count": 10000,
+      "iteration": 2,
+      "task": "pdf",
+      "seconds": 2.9846,
+      "cpu_seconds": 3.0,
+      "process_peak_mib": 256.05,
+      "heartbeat_count": 238,
+      "max_heartbeat_gap_seconds": 0.1029
+    },
+    {
+      "count": 10000,
+      "iteration": 2,
+      "task": "xlsx",
+      "seconds": 10.4289,
+      "cpu_seconds": 10.5625,
+      "process_peak_mib": 256.05,
+      "heartbeat_count": 920,
+      "max_heartbeat_gap_seconds": 0.052
+    },
+    {
+      "count": 10000,
+      "iteration": 2,
+      "events": 3690,
+      "unique_samples": 3353,
+      "bytes": {
+        ".png": 151844,
+        ".pdf": 487192,
+        ".xlsx": 1713326
+      }
+    },
+    {
+      "count": 100000,
+      "iteration": 0,
+      "task": "import_csv",
+      "seconds": 0.278,
+      "cpu_seconds": 0.2656,
+      "process_peak_mib": 204.05,
+      "heartbeat_count": 25,
+      "max_heartbeat_gap_seconds": 0.0453
+    },
+    {
+      "count": 100000,
+      "iteration": 0,
+      "task": "sqlite_save",
+      "seconds": 0.535,
+      "cpu_seconds": 0.5156,
+      "process_peak_mib": 204.05,
+      "heartbeat_count": 53,
+      "max_heartbeat_gap_seconds": 0.0357
+    },
+    {
+      "count": 100000,
+      "iteration": 0,
+      "task": "sqlite_load",
+      "seconds": 0.2584,
+      "cpu_seconds": 0.2656,
+      "process_peak_mib": 213.54,
+      "heartbeat_count": 25,
+      "max_heartbeat_gap_seconds": 0.03
+    },
+    {
+      "count": 100000,
+      "iteration": 0,
+      "task": "analysis",
+      "seconds": 0.2021,
+      "cpu_seconds": 0.2031,
+      "process_peak_mib": 213.54,
+      "heartbeat_count": 20,
+      "max_heartbeat_gap_seconds": 0.0278
+    },
+    {
+      "count": 100000,
+      "iteration": 0,
+      "task": "anomaly",
+      "seconds": 0.2701,
+      "cpu_seconds": 0.2656,
+      "process_peak_mib": 213.54,
+      "heartbeat_count": 24,
+      "max_heartbeat_gap_seconds": 0.0425
+    },
+    {
+      "count": 100000,
+      "iteration": 0,
+      "task": "plot_and_png",
+      "seconds": 0.1334,
+      "cpu_seconds": 0.1719,
+      "process_peak_mib": 217.55,
+      "heartbeat_count": 3,
+      "max_heartbeat_gap_seconds": 0.0755
+    },
+    {
+      "count": 100000,
+      "iteration": 0,
+      "task": "report_snapshot",
+      "seconds": 0.949,
+      "cpu_seconds": 0.9375,
+      "process_peak_mib": 252.2,
+      "heartbeat_count": 91,
+      "max_heartbeat_gap_seconds": 0.0389
+    },
+    {
+      "count": 100000,
+      "iteration": 0,
+      "task": "pdf",
+      "seconds": 55.0573,
+      "cpu_seconds": 54.0312,
+      "process_peak_mib": 847.16,
+      "heartbeat_count": 5225,
+      "max_heartbeat_gap_seconds": 0.9253
+    },
+    {
+      "count": 100000,
+      "iteration": 0,
+      "task": "xlsx",
+      "seconds": 63.5982,
+      "cpu_seconds": 63.1719,
+      "process_peak_mib": 847.16,
+      "heartbeat_count": 6320,
+      "max_heartbeat_gap_seconds": 0.4186
+    },
+    {
+      "count": 100000,
+      "iteration": 0,
+      "events": 37077,
+      "unique_samples": 33700,
+      "bytes": {
+        ".png": 140900,
+        ".pdf": 3934759,
+        ".xlsx": 17048056
+      }
+    },
+    {
+      "count": 100000,
+      "iteration": 1,
+      "task": "import_csv",
+      "seconds": 0.2874,
+      "cpu_seconds": 0.25,
+      "process_peak_mib": 847.16,
+      "heartbeat_count": 26,
+      "max_heartbeat_gap_seconds": 0.0481
+    },
+    {
+      "count": 100000,
+      "iteration": 1,
+      "task": "sqlite_save",
+      "seconds": 0.5545,
+      "cpu_seconds": 0.4531,
+      "process_peak_mib": 847.16,
+      "heartbeat_count": 54,
+      "max_heartbeat_gap_seconds": 0.0364
+    },
+    {
+      "count": 100000,
+      "iteration": 1,
+      "task": "sqlite_load",
+      "seconds": 0.2641,
+      "cpu_seconds": 0.2656,
+      "process_peak_mib": 847.16,
+      "heartbeat_count": 25,
+      "max_heartbeat_gap_seconds": 0.0383
+    },
+    {
+      "count": 100000,
+      "iteration": 1,
+      "task": "analysis",
+      "seconds": 0.2103,
+      "cpu_seconds": 0.2188,
+      "process_peak_mib": 847.16,
+      "heartbeat_count": 20,
+      "max_heartbeat_gap_seconds": 0.036
+    },
+    {
+      "count": 100000,
+      "iteration": 1,
+      "task": "anomaly",
+      "seconds": 1.1646,
+      "cpu_seconds": 1.1094,
+      "process_peak_mib": 847.16,
+      "heartbeat_count": 26,
+      "max_heartbeat_gap_seconds": 0.9139
+    },
+    {
+      "count": 100000,
+      "iteration": 1,
+      "task": "plot_and_png",
+      "seconds": 0.132,
+      "cpu_seconds": 0.125,
+      "process_peak_mib": 847.16,
+      "heartbeat_count": 3,
+      "max_heartbeat_gap_seconds": 0.0706
+    },
+    {
+      "count": 100000,
+      "iteration": 1,
+      "task": "report_snapshot",
+      "seconds": 1.0033,
+      "cpu_seconds": 1.0,
+      "process_peak_mib": 847.16,
+      "heartbeat_count": 93,
+      "max_heartbeat_gap_seconds": 0.0387
+    },
+    {
+      "count": 100000,
+      "iteration": 1,
+      "task": "pdf",
+      "seconds": 56.1221,
+      "cpu_seconds": 55.7656,
+      "process_peak_mib": 852.0,
+      "heartbeat_count": 5306,
+      "max_heartbeat_gap_seconds": 0.9802
+    },
+    {
+      "count": 100000,
+      "iteration": 1,
+      "task": "xlsx",
+      "seconds": 64.675,
+      "cpu_seconds": 64.4531,
+      "process_peak_mib": 852.0,
+      "heartbeat_count": 6386,
+      "max_heartbeat_gap_seconds": 0.4388
+    },
+    {
+      "count": 100000,
+      "iteration": 1,
+      "events": 37077,
+      "unique_samples": 33700,
+      "bytes": {
+        ".png": 140900,
+        ".pdf": 3934792,
+        ".xlsx": 17048058
+      }
+    },
+    {
+      "count": 100000,
+      "iteration": 2,
+      "task": "import_csv",
+      "seconds": 0.2848,
+      "cpu_seconds": 0.2812,
+      "process_peak_mib": 852.0,
+      "heartbeat_count": 27,
+      "max_heartbeat_gap_seconds": 0.0393
+    },
+    {
+      "count": 100000,
+      "iteration": 2,
+      "task": "sqlite_save",
+      "seconds": 0.5587,
+      "cpu_seconds": 0.5,
+      "process_peak_mib": 852.0,
+      "heartbeat_count": 54,
+      "max_heartbeat_gap_seconds": 0.0389
+    },
+    {
+      "count": 100000,
+      "iteration": 2,
+      "task": "sqlite_load",
+      "seconds": 0.2739,
+      "cpu_seconds": 0.2656,
+      "process_peak_mib": 852.0,
+      "heartbeat_count": 27,
+      "max_heartbeat_gap_seconds": 0.0311
+    },
+    {
+      "count": 100000,
+      "iteration": 2,
+      "task": "analysis",
+      "seconds": 0.2164,
+      "cpu_seconds": 0.2344,
+      "process_peak_mib": 852.0,
+      "heartbeat_count": 20,
+      "max_heartbeat_gap_seconds": 0.0389
+    },
+    {
+      "count": 100000,
+      "iteration": 2,
+      "task": "anomaly",
+      "seconds": 0.2531,
+      "cpu_seconds": 0.25,
+      "process_peak_mib": 852.0,
+      "heartbeat_count": 25,
+      "max_heartbeat_gap_seconds": 0.0272
+    },
+    {
+      "count": 100000,
+      "iteration": 2,
+      "task": "plot_and_png",
+      "seconds": 0.1352,
+      "cpu_seconds": 0.1562,
+      "process_peak_mib": 852.0,
+      "heartbeat_count": 3,
+      "max_heartbeat_gap_seconds": 0.0757
+    },
+    {
+      "count": 100000,
+      "iteration": 2,
+      "task": "report_snapshot",
+      "seconds": 0.9565,
+      "cpu_seconds": 0.9688,
+      "process_peak_mib": 852.0,
+      "heartbeat_count": 91,
+      "max_heartbeat_gap_seconds": 0.0384
+    },
+    {
+      "count": 100000,
+      "iteration": 2,
+      "task": "pdf",
+      "seconds": 57.6097,
+      "cpu_seconds": 57.125,
+      "process_peak_mib": 853.03,
+      "heartbeat_count": 5397,
+      "max_heartbeat_gap_seconds": 0.9231
+    },
+    {
+      "count": 100000,
+      "iteration": 2,
+      "task": "xlsx",
+      "seconds": 77.5081,
+      "cpu_seconds": 77.6875,
+      "process_peak_mib": 853.03,
+      "heartbeat_count": 7117,
+      "max_heartbeat_gap_seconds": 0.4657
+    },
+    {
+      "count": 100000,
+      "iteration": 2,
+      "events": 37077,
+      "unique_samples": 33700,
+      "bytes": {
+        ".png": 140900,
+        ".pdf": 3935294,
+        ".xlsx": 17048060
+      }
+    }
+  ]
+}
