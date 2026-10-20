@@ -1,6 +1,6 @@
 # 智电析电力系统运行数据分析与可视化软件 V1.0
 
-Windows 桌面软件，开发版本 **V0.2.0 数据管理系统**。按本次确认使用 64 位 Python 3.13。
+Windows 桌面软件，开发版本 **V0.3.0 电气参数分析与计算系统**。按本次确认使用 64 位 Python 3.13。
 产品正式名称中的 V1.0 与开发版本分别管理。V0.1 的八个页面、导航、首页入口和原生窗口操作均保留。
 
 ## 安装与运行
@@ -10,7 +10,7 @@ Windows 桌面软件，开发版本 **V0.2.0 数据管理系统**。按本次确
 ```powershell
 git clone https://github.com/sunyiyang299-cell/SmartPowerAnalyzer.git
 cd SmartPowerAnalyzer
-git switch feature/v0.2-data-management
+git switch feature/v0.3-electrical-analysis
 py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe main.py
@@ -19,6 +19,81 @@ py -3.13 -m venv .venv
 如果没有 Python Launcher，可用指向 Python 3.13 的 `python` 替代 `py -3.13`。
 直接调用虚拟环境的 Python，无需修改 PowerShell 执行策略。当前提供源码运行，尚无 `.exe` 安装包。
 运行依赖为 PySide6、Pandas、NumPy、PyQtGraph 和 Excel 引擎 openpyxl；SQLite 是 Python 标准库。
+
+## V0.3 电气参数分析
+
+保留全部 V0.1 桌面导航和 V0.2 数据管理能力，新增电压、电流及功率分析页面。
+
+1. 在“数据管理”导入并校验文件，或生成明确标记的模拟数据，然后手动保存数据集。
+2. 进入“电压分析”“电流分析”或“功率分析”，点击“刷新数据集”。
+3. 选择已保存的数据集，点击“开始分析”。显示名称、采样数、数据来源及带单位的结果。
+4. 再次点击“开始分析”会重新读取并计算。切换选择或开始新任务立即清空旧结果；失败时不显示容易误认为新结果的旧值。
+5. 功率页同时显示逐采样点 P、S、|Q| 序列及功率因数统计；表格与页面均可滚动。
+
+列表读取、数据库读取、校验和计算均在后台线程执行。未选择、数据为空、已删除、损坏或数值无法计算时给出提示。后台任务期间保留导航能力，关闭窗口会提示等待，避免销毁仍运行的线程。
+所有结果来自本次读取的已保存数据快照；数据变化后请手动刷新、重新分析。
+
+### 统计公式与单位
+
+对 N 个等权采样点 x₁…xₙ：
+
+```text
+算术平均值 μ = Σxᵢ / N
+总体标准差 σ = sqrt(Σ(xᵢ − μ)² / N)    （ddof = 0）
+最大值 = max(xᵢ)，最小值 = min(xᵢ)，采样数量 = N
+```
+
+电压与电流输入均为有效值（RMS）。电压各统计量单位 V，电流各统计量单位 A，采样数量单位“条”。
+**电流有效值最大值是各采样记录的最大值，不是交流瞬时峰值。**
+功率因数统计为无量纲，显示采样点算术平均值、最大值、最小值及总体标准差。
+采样点 PF 算术平均值不等于整个时间段的综合功率因数；本版本没有以功率或能量积分定义综合功率因数。
+统计不作时间间隔加权，不推断设备是否合格或是否越限。
+
+### 单相功率公式
+
+适用前提：单相、正弦、稳态交流；U 为电压有效值（V）、I 为电流有效值（A）、PF 为非负功率因数（0～1）。对每个采样点：
+
+```text
+S = U × I                                      单位 VA
+P = U × I × PF = S × PF                        单位 W
+|Q| = sqrt(S² − P²)
+    = S × sqrt(max(0, (1 − PF) × (1 + PF)))     单位 var
+```
+
+最后一种形式与 `S × sqrt(max(0, 1 − PF²))` 等价，避免直接平方极大 S，且减轻 PF 接近 1 时的消减误差。
+当 S=0 时三个功率结果均为 0。每种功率返回完整逐点序列及算术平均、最大、最小值。
+无功功率结果始终是**绝对值**，不能据此判断感性/容性、超前/滞后或能量流向。
+本版本不适用于三相、非正弦、谐波功率分解，不计算电能、时间段综合 PF 或报告结论。
+
+| 示例 U / I / PF | P（W） | S（VA） | 无功功率绝对值（var） |
+| --- | --- | --- | --- |
+| 220 / 10 / 0.9 | 1980 | 2200 | 958.9577676 |
+| 0 / 10 / 0.9 | 0 | 0 | 0 |
+| 220 / 10 / 1 | 2200 | 2200 | 0 |
+| 220 / 10 / 0 | 0 | 2200 | 2200 |
+
+需求测试 1 的“约 958.47 var”与其给定公式不符：`sqrt(2200²−1980²)=sqrt(919600)=958.9577676 var`，应约为 958.96 var。实现和测试均以公式及独立计算参考值为准，没有放宽容差去接受错误近似值。
+
+### 数值与模块约定
+
+核心计算不依赖 Qt；`smartpower/analysis/` 中的 voltage、current、power_factor 和 power 模块可独立调用，返回结构化结果。service 复用 V0.2 Dataset、validate_frame 和 DatasetRepository，不改动 SQLite 版本 2 的表结构，不自动保存或覆盖分析结果。
+独立算法接口要求非空的一维真实数值序列，拒绝文本、布尔值、复数、负数、NaN、Infinity、长度不匹配以及越界 PF；文件导入的数字文本仍由 V0.2 校验层正常解析。
+使用 NumPy float64，统计先缩放后计算均值与 `np.std(..., ddof=0)`，避免极大输入的求和或平方中间溢出。功率结果超出 float64 可表示范围会明确失败，不能把 Infinity 当正常结果。
+在 float64 精度和范围边界仍可能发生舍入或极小值下溢为 0；界面按 12 位有效数字展示，算法返回完整 float64 值，不用于替代计量仪器校准或高精度测量认证。
+
+示例（项目根目录内）：
+
+```python
+from smartpower.analysis.voltage import analyze_voltage
+from smartpower.analysis.power import analyze_power
+
+stats = analyze_voltage([220, 221, 219])
+power = analyze_power([220], [10], [0.9])
+print(stats.mean, stats.unit)
+print(power.active, power.apparent, power.reactive_abs)
+```
+
+公式与统计定义参考：[NumPy 总体标准差](https://numpy.org/doc/stable/reference/generated/numpy.std.html)、[Yokogawa 功率测量基础](https://tmi.yokogawa.com/library/resources/fundamentals/fundamentals-of-electric-power-measurements/)。
 
 ## 导入、校验与预览
 
@@ -93,6 +168,8 @@ $env:SMARTPOWER_DB_PATH = "C:\你的数据目录\datasets.sqlite3"
 .\.venv\Scripts\python.exe -m pytest tests/test_repository.py tests/test_database.py -q
 .\.venv\Scripts\python.exe -m pytest tests/test_demo.py tests/test_query.py -q
 .\.venv\Scripts\python.exe -m pytest tests/test_data_ui.py -q
+.\.venv\Scripts\python.exe -m pytest tests/test_analysis_algorithms.py tests/test_analysis_service.py -q
+.\.venv\Scripts\python.exe -m pytest tests/test_analysis_ui.py -q
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m pip check
 ```
@@ -101,12 +178,12 @@ GUI 测试默认 `offscreen`。Windows 原生后端复验（会短暂显示窗�
 
 ```powershell
 $env:QT_QPA_PLATFORM = "windows"
-.\.venv\Scripts\python.exe -m pytest tests/test_window.py tests/test_data_ui.py tests/test_entrypoint.py -q
+.\.venv\Scripts\python.exe -m pytest tests/test_window.py tests/test_data_ui.py tests/test_analysis_ui.py tests/test_entrypoint.py -q
 Remove-Item Env:QT_QPA_PLATFORM
 ```
 
 CI 在 Windows/Python 3.13 下运行 Pytest。测试涵盖 CSV/Excel、中文路径、字段和数值校验、事务回滚、读写删除、模拟数据标记、原子导出、模型排序筛选、十万条后台导入响应及窗口保护。
-本阶段实际执行结果及新增文件清单见 [V0.2 验证记录](docs/VALIDATION_V0.2.md)，V0.1 记录保留作历史参考。
+V0.3 实际执行结果及文件清单见 [V0.3 验证记录](docs/VALIDATION_V0.3.md)。[V0.2](docs/VALIDATION_V0.2.md) 和 V0.1 记录保留作历史参考。
 沙箱环境如不能访问默认临时目录，可将 `TEMP`、`TMP` 和 Pytest 的 `--basetemp` 指向有写入权限的工作目录；不要通过跳过失败测试规避问题。
 
 ## 模块结构与扩展
@@ -116,6 +193,11 @@ main.py                         桌面入口
 smartpower/
   application.py                Qt 初始化、中文翻译、事件循环
   config.py                     正式名称、开发版本
+  analysis/
+    statistics.py               严格输入检查、缩放统计、结构化结果
+    voltage.py / current.py     电压、电流有效值统计
+    power_factor.py / power.py  PF 统计及单相逐点功率
+    service.py                  复用数据对象、校验和仓库的分析服务
   data/
     validation.py               独立字段、时间和电气数值校验
     importer.py                 Pandas CSV / Excel 导入及数据集对象
@@ -129,16 +211,19 @@ smartpower/
     tasks.py                    后台任务，结果在主线程消费
     table_model.py              QAbstractTableModel，只读按需取值
     pages/data_management.py    数据管理控件和任务编排
+    pages/analysis.py           三个分析页面及结果生命周期
+    power_series_model.py       功率序列按需展示
+    paths.py                    共享数据库路径
     pages/registry.py           八个页面注册表
     pages/{base,home,features,settings}.py
     theme.py / widgets.py       共用浅色样式和控件
-tests/                          V0.1 回归及 V0.2 Pytest 测试
+tests/                          V0.1/V0.2 回归及 V0.3 算法、服务、GUI 测试
 requirements.txt                运行依赖
 requirements-dev.txt            测试依赖
 .github/workflows/tests.yml     Windows CI
 ```
 
 数据处理和数据库模块不依赖 Qt。界面通过后台任务调用它们，模型更新仅在 GUI 线程执行；新增分析算法仍应放在独立服务中。
-电压、电流、功率分析、异常检测和报告页在本阶段继续保留待开发说明，没有新增虚假分析结果。
+异常检测和报告页继续保留待开发说明；分析页仅展示实际计算结果，模拟数据保留模拟标记。
 
 接口参考：[Pandas read_excel](https://pandas.pydata.org/docs/reference/api/pandas.read_excel.html)、[Qt 表格模型](https://doc.qt.io/qtforpython-6.6/PySide6/QtCore/QAbstractTableModel.html)、[Qt QThread](https://doc.qt.io/qtforpython-6.10/PySide6/QtCore/QThread.html)。

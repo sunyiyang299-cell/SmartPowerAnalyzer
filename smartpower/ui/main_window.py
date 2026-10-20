@@ -52,7 +52,7 @@ class MainWindow(QMainWindow):
             if isinstance(page, HomePage):
                 page.navigate_requested.connect(self.navigate)
         navigation.addStretch()
-        navigation.addWidget(label(f"V{APP_VERSION} · 数据管理", "muted"))
+        navigation.addWidget(label(f"V{APP_VERSION} · 电气分析", "muted"))
         layout.addWidget(sidebar)
         layout.addWidget(self.stack, 1)
         self.setCentralWidget(workspace)
@@ -71,12 +71,13 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"当前页面：{PAGE_SPECS[index].title}  |  V{APP_VERSION}")
 
     def closeEvent(self, event):
-        page = self.pages["data"]
-        if page.busy:
-            page.notify("后台任务尚未完成，请等待结束后再关闭窗口。")
-            self.navigate("data")
-            event.ignore()
-        elif not page.confirm_discard():
+        for key, page in self.pages.items():
+            if getattr(page, "busy", False):
+                page.notify("后台任务尚未完成，请等待结束后再关闭窗口。")
+                self.navigate(key)
+                event.ignore()
+                return
+        if not self.pages["data"].confirm_discard():
             event.ignore()
         else:
             super().closeEvent(event)

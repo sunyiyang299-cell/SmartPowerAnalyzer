@@ -1,9 +1,6 @@
 """Data-management UI orchestration. All expensive work runs in TaskThread."""
 
-import os
-from pathlib import Path
-
-from PySide6.QtCore import QStandardPaths, Qt, Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QTextOption
 from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QFileDialog, QHBoxLayout, QLineEdit,
@@ -16,16 +13,10 @@ from smartpower.data.query import query_rows
 from smartpower.data.validation import REQUIRED_COLUMNS
 from smartpower.storage.repository import DatasetRepository
 from smartpower.ui.pages.base import BasePage
+from smartpower.ui.paths import default_database_path
 from smartpower.ui.table_model import SampleTableModel
 from smartpower.ui.tasks import TaskThread
 from smartpower.ui.widgets import label
-
-
-def default_database_path() -> Path:
-    override = os.environ.get("SMARTPOWER_DB_PATH")
-    if override:
-        return Path(override)
-    return Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation)) / "datasets.sqlite3"
 
 
 class DataManagementPage(BasePage):
