@@ -81,7 +81,13 @@ class WindowTests(unittest.TestCase):
                 self.assertTrue(page.analyze_button.isEnabled())
                 self.assertIsNone(page.current_result)
                 self.assertEqual(page.summary.rowCount(), 0)
-        for key in ("anomalies", "reports"):
+        from smartpower.ui.pages.anomaly import AnomalyPage
+        anomaly = self.window.pages["anomalies"]
+        self.assertIsInstance(anomaly, AnomalyPage)
+        self.assertFalse(anomaly.enabled_check.isChecked())
+        self.assertEqual(anomaly.event_model.rowCount(), 0)
+        self.assertTrue(anomaly.analyze_button.isEnabled())
+        for key in ("reports",):
             with self.subTest(page=key):
                 texts = " ".join(w.text() for w in self.window.pages[key].findChildren(QLabel))
                 self.assertIn("待开发", texts)

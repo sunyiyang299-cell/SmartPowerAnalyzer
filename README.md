@@ -1,6 +1,6 @@
 # 智电析电力系统运行数据分析与可视化软件 V1.0
 
-Windows 桌面软件，开发版本 **V0.3.0 电气参数分析与计算系统**。按本次确认使用 64 位 Python 3.13。
+Windows 桌面软件，开发版本 **V0.4.0 数据可视化与异常检测系统**。按本次确认使用 64 位 Python 3.13。
 产品正式名称中的 V1.0 与开发版本分别管理。V0.1 的八个页面、导航、首页入口和原生窗口操作均保留。
 
 ## 安装与运行
@@ -10,7 +10,7 @@ Windows 桌面软件，开发版本 **V0.3.0 电气参数分析与计算系统**
 ```powershell
 git clone https://github.com/sunyiyang299-cell/SmartPowerAnalyzer.git
 cd SmartPowerAnalyzer
-git switch feature/v0.3-electrical-analysis
+git switch feature/v0.4-visualization-anomaly
 py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe main.py
@@ -19,6 +19,52 @@ py -3.13 -m venv .venv
 如果没有 Python Launcher，可用指向 Python 3.13 的 `python` 替代 `py -3.13`。
 直接调用虚拟环境的 Python，无需修改 PowerShell 执行策略。当前提供源码运行，尚无 `.exe` 安装包。
 运行依赖为 PySide6、Pandas、NumPy、PyQtGraph 和 Excel 引擎 openpyxl；SQLite 是 Python 标准库。
+
+## V0.4 曲线可视化与异常检测
+
+保留 V0.1～V0.3 的八页导航、导入、校验、SQLite、排序筛选和统计分析。正式产品名称仍为 V1.0，开发版本为 0.4.0。
+
+1. 数据管理中导入并保存数据，或生成并保存明确标记的模拟数据。
+2. 进入电压、电流或功率分析，刷新、选择已保存数据集，点击“开始分析”。
+3. 曲线横轴为本地无时区采样时间，支持滚轮缩放、左键拖动平移和“恢复完整视图”；悬停显示原始索引、完整时间及 12 位有效数字的数值。
+4. 电压为有效值 V、电流为有效值 A，不是交流瞬时波形。功率复用 V0.3：P（W）、S（VA）、无功绝对值 |Q|（var）；共享数值轴但分别标明单位，勾选框可单独显隐。
+5. 进入异常检测，刷新并选择同一数据集；填写电压下限、电压上限、电流上限，明确勾选启用，再点击“开始检测”。演示预设 210 V / 230 V / 20 A **不是国家标准或设备合格判据**，不会自动启用检测。
+6. 查看事件总数、唯一异常采样点数、各类型次数和明细，可按类型筛选。电压/电流图中显示匹配数据集和数据内容的异常标记，点击或悬停标记查看时间、原始索引、采样值和触发阈值；支持隐藏标记。
+7. 修改阈值、启用状态或检测数据集立即清除旧结果与联动标记。后台检测期间改动配置会丢弃过期结果，须重新检测。分析页面切换数据集会清空图表，读取或计算失败不保留旧结果。
+8. 点击“导出 PNG”选择中文路径。图像包含标题、名称、采样数、时间轴、单位、图例、来源和当前视图；模拟图像明确显示“模拟数据，非真实设备测量”。导出当前缩放、显隐状态；如需全图，先恢复完整视图。已有文件必须确认覆盖，默认不覆盖。
+
+### 阈值规则与统计口径
+
+- 电压 `< 下限`：电压偏低；电压 `> 上限`：电压偏高；电流 `> 上限`：电流偏高。
+- **等于阈值不计异常**。阈值须为有限非负数，电压下限小于上限，电流上限大于 0。空值、NaN、Infinity、负数及无效配置明确拒绝，不静默修正输入。
+- 一行电压与电流同时越限计两个事件；唯一采样点数按原始行去重。原始记录索引从 0 起，对应 SQLite 保存顺序，与排序后的时间位置区分。
+- 事件保留数据集标识、原始行、时间、参数、采样值、类型、阈值、单位和来源。没有符合条件的记录时仅提示“未检测到符合当前阈值条件的异常记录。”
+
+**异常检测结果仅供数据分析参考，不构成设备安全或电气标准符合性认证。**
+
+### 时间、性能与导出边界
+
+绘图采用稳定时间排序视图：非等间隔、跨日期和乱序时间按实际时间排列；重复时间戳全部保留，按原始先后连接，因此可能出现竖直线段。重复时刻悬停按纵向距离选择对应原始行；功率页以 P 曲线选取同一原始行，并显示全部功率值。原始数据、数据库顺序和逐点功率表不改变。
+内部相对秒坐标避免现代日期的绝对 epoch 浮点误差；时间标签显示日期和秒（亚秒视区显示毫秒），精确原始时间在读数/明细中显示。跨度很大时浮点坐标仍有分辨率限制，不改变原始时间。
+
+读取、校验、排序准备、统计及完整数据异常检测使用后台 TaskThread。PyQtGraph 启用可视区裁剪和 peak 自动降采样，使用一像素曲线和 NumPy 数组；仅渲染减少点数，统计、异常明细和存储使用完整数据。
+每类异常在当前视区最多显示 1500 个均匀选取的代表标记；缩放后重新选择，**代表标记不等于全部异常**，准确数量和完整事件见异常明细。每类仅一个 ScatterPlotItem，不创建十万个独立图形对象。
+十万条采样已进行实际测试，结果见 [V0.4 验证记录](docs/VALIDATION_V0.4.md)；性能受内存、硬件和数据分布影响。当前为内存加载，无流式分页或实时采集，不承诺无限数据量。
+
+异常联动同时核对保存数据集 ID、名称、来源和完整采样内容 SHA-256 指纹。检测配置变化会使结果失效。PNG 文件选择和覆盖对话框返回后再次核对图表修订号；数据集改变即取消导出。GUI 线程先抓取一致快照，再写同目录临时 PNG，完成后原子改名/替换，失败保留旧文件。图像导出是当前图表截图，包含操作栏；不替代原始 CSV 数据导出或正式报告。
+
+新增模块：`anomaly/{models,detector,service}.py`（不依赖 Qt），`visualization/{snapshot,time_axis,plot_widget,export}.py`，`ui/anomaly_model.py`，`ui/pages/anomaly.py`。数据库模式仍为 2，无新运行依赖。
+
+新增专项测试：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_anomaly.py tests/test_anomaly_ui.py tests/test_visualization.py -q
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m compileall -q main.py smartpower tests
+.\.venv\Scripts\python.exe -m pip check
+```
+
+Windows 原生复验时将 `QT_QPA_PLATFORM` 设置为 `windows`，运行上述 GUI 测试及原有 GUI 回归。自动化事件、原生窗口截图检查与最终用户人工验收的区别见验证记录。
 
 ## V0.3 电气参数分析
 
@@ -224,6 +270,6 @@ requirements-dev.txt            测试依赖
 ```
 
 数据处理和数据库模块不依赖 Qt。界面通过后台任务调用它们，模型更新仅在 GUI 线程执行；新增分析算法仍应放在独立服务中。
-异常检测和报告页继续保留待开发说明；分析页仅展示实际计算结果，模拟数据保留模拟标记。
+异常检测页已实现用户阈值检测；报告页继续保留待开发说明。分析页仅展示实际计算结果，模拟数据保留模拟标记。
 
 接口参考：[Pandas read_excel](https://pandas.pydata.org/docs/reference/api/pandas.read_excel.html)、[Qt 表格模型](https://doc.qt.io/qtforpython-6.6/PySide6/QtCore/QAbstractTableModel.html)、[Qt QThread](https://doc.qt.io/qtforpython-6.10/PySide6/QtCore/QThread.html)。

@@ -51,8 +51,10 @@ class MainWindow(QMainWindow):
             self.stack.addWidget(page)
             if isinstance(page, HomePage):
                 page.navigate_requested.connect(self.navigate)
+        for key in ("voltage", "current", "power"):
+            self.pages["anomalies"].detection_changed.connect(self.pages[key].receive_detection)
         navigation.addStretch()
-        navigation.addWidget(label(f"V{APP_VERSION} · 电气分析", "muted"))
+        navigation.addWidget(label(f"V{APP_VERSION} · 可视化与检测", "muted"))
         layout.addWidget(sidebar)
         layout.addWidget(self.stack, 1)
         self.setCentralWidget(workspace)
