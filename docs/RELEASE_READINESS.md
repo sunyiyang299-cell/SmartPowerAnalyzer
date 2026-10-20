@@ -34,7 +34,7 @@
 | 版本与正式名称 | PASS | 开发0.9.0，正式名称V1.0不变 |
 | 源码、测试、文件清单 | PASS | 新增/修改文件见验证记录，无真实数据库/报告入库 |
 | 本机自动化测试及语法 | PASS | 最终数量/时间见验证记录；不跳过失败测试 |
-| GitHub Actions | NOT TESTED | 创建PR后检查；以PR实时Checks与最终交付报告为准 |
+| GitHub Actions | PASS | 代码提交dfe3596：PR及push CI均success；完整311项/24子测试、原生专项20项/19子测试。补充文档后的最终状态见[PR #6 Checks](https://github.com/sunyiyang299-cell/SmartPowerAnalyzer/pull/6/checks) |
 | EXE构建/干净Windows安装与卸载/升级 | NOT TESTED | 收集Qt平台/翻译/ReportLab/NumPy等资源，验证数据目录、卸载保留数据 |
 | 安装签名/防病毒/自动更新策略 | NOT TESTED | V1.0发布流程待定；不擅自添加网络更新 |
 | 使用说明书/软件著作权材料 | NOT TESTED | 待基于最终软件制作真实截图、说明书、源码材料 |

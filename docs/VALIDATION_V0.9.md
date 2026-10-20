@@ -35,7 +35,7 @@
 - `python -m compileall -q main.py smartpower tests tools`：PASS。
 - 新 venv `python -m pip check`：PASS，No broken requirements found。
 - `git diff --check`：PASS，提交前执行。
-- Windows CI 增加语法检查和原生窗口/缩放/恢复回归；保留完整 offscreen pytest。远程结果以 PR Checks 为准，创建后在交付报告记录。
+- Windows CI 增加语法检查和原生窗口/缩放/恢复回归；保留完整 offscreen pytest。实际代码提交 `dfe3596ffdc6760971d349a77c36ad85df84a738` 的 [PR CI](https://github.com/sunyiyang299-cell/SmartPowerAnalyzer/actions/runs/39425536195) 与 [push CI](https://github.com/sunyiyang299-cell/SmartPowerAnalyzer/actions/runs/39425528019) 均 success；完整 offscreen 311 passed、24 subtests passed、74.40秒，原生专项20 passed、19 subtests passed、28.81秒，0 failed、0 skipped，依赖/语法检查也通过。后续提交仅补充这份CI记录，最终状态见 [PR #6 Checks](https://github.com/sunyiyang299-cell/SmartPowerAnalyzer/pull/6/checks)。
 
 测试开发过程中纠正了新测试的控件接口（曲线键、QPlainTextEdit）和截图断言（从任意压缩字节阈值改为 PNG 签名及像素尺寸）；不是软件计算错误。中间原生测试的普通长路径创建失败按以下限制记录，随后改用显式扩展路径完成原有完整业务断言，没有跳过失败测试。
 
